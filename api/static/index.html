@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat with AI Gavin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background: url('/static/office-background.jpeg') no-repeat center center fixed;
+            background-size: cover;
+            display: flex;
+            flex-direction: column;
+            color: #2c3e50;
+        }
+
+        #main-container {
+            display: flex;
+            flex: 1;
+            gap: 24px;
+            padding: 32px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            backdrop-filter: blur(8px);
+            position: relative;
+        }
+
+        #chat-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.85);
+            border-radius: 24px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+            overflow: hidden;
+            margin: 0 auto;
+            max-width: 900px;
+            width: 100%;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        #chat-section:hover {
+            transform: translateY(-2px);
+        }
+
+        .header {
+            padding: 24px 32px;
+            background: rgba(255, 255, 255, 0.95);
+            border-bottom: 1px solid rgba(225, 232, 237, 0.8);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin: 0;
+            color: #1a1a1a;
+            font-weight: 600;
+            background: linear-gradient(120deg, #2c3e50, #3498db);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        #chat-container {
+            flex: 1;
+            padding: 32px;
+            overflow-y: auto;
+            background-color: rgba(248, 249, 250, 0.7);
+            scroll-behavior: smooth;
+        }
+
+        #chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #chat-container::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 4px;
+        }
+
+        #chat-container::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+
+        .message {
+            margin-bottom: 28px;
+            max-width: 85%;
+            animation: fadeIn 0.4s ease-out;
+            position: relative;
+        }
+
+        @keyframes fadeIn {
+            from { 
+                opacity: 0; 
+                transform: translateY(20px); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0); 
+            }
+        }
+
+        .user-message {
+            margin-left: auto;
+            background: linear-gradient(135deg, #0066cc, #0052a3);
+            padding: 16px 20px;
+            border-radius: 20px 20px 4px 20px;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 102, 204, 0.2);
+            position: relative;
+            font-weight: 500;
+        }
+
+        .user-message::before {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 10px;
+            height: 10px;
+            background: inherit;
+            border-radius: 50%;
+        }
+
+        .ai-message {
+            margin-right: auto;
+            background: white;
+            padding: 16px 20px;
+            border-radius: 20px 20px 20px 4px;
+            color: #2c3e50;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(225, 232, 237, 0.8);
+            line-height: 1.6;
+            position: relative;
+        }
+
+        .ai-message::before {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: -2px;
+            width: 10px;
+            height: 10px;
+            background: white;
+            border-radius: 50%;
+            border: 1px solid rgba(225, 232, 237, 0.8);
+        }
+
+        .error-message {
+            background: linear-gradient(135deg, #ff4757, #ff6b81);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 16px;
+            margin: 16px auto;
+            max-width: 85%;
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.2);
+            font-weight: 500;
+            border: none;
+        }
+
+        #input-container {
+            padding: 24px 32px;
+            border-top: 1px solid rgba(225, 232, 237, 0.8);
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.95);
+            position: relative;
+        }
+
+        #message-input {
+            flex: 1;
+            padding: 16px 24px;
+            border: 2px solid rgba(225, 232, 237, 0.8);
+            border-radius: 30px;
+            font-size: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.9);
+            color: #2c3e50;
+            font-family: inherit;
+        }
+
+        #message-input:focus {
+            border-color: #0066cc;
+            box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.1);
+            background: white;
+        }
+
+        #message-input::placeholder {
+            color: #94a3b8;
+        }
+
+        #send-button {
+            background: linear-gradient(135deg, #0066cc, #0052a3);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 54px;
+            height: 54px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 102, 204, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        #send-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+            transition: transform 0.3s ease;
+        }
+
+        #send-button:hover {
+            transform: scale(1.05) rotate(5deg);
+        }
+
+        #send-button:hover::before {
+            transform: translateY(100%);
+        }
+
+        #send-button:disabled {
+            background: #e2e8f0;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        #send-button svg {
+            width: 24px;
+            height: 24px;
+            transform: translateX(2px);
+            transition: transform 0.3s ease;
+        }
+
+        #send-button:hover svg {
+            transform: translateX(4px);
+        }
+
+        /* Debug Panel Styles */
+        #debug-section {
+            flex: 1;
+            display: none; /* Hidden by default */
+            max-width: 600px;
+        }
+
+        /* When debug is active */
+        body.debug-active #chat-section {
+            max-width: 600px;
+        }
+
+        body.debug-active #debug-section {
+            display: block;
+        }
+
+        #debug-panel {
+            height: 100%;
+            overflow-y: auto;
+            border: 1px solid rgba(225, 232, 237, 0.8);
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+        }
+
+        .tabs {
+            display: flex;
+            padding: 16px;
+            border-bottom: 1px solid rgba(225, 232, 237, 0.8);
+            background: rgba(248, 249, 250, 0.9);
+            gap: 8px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border-radius: 12px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tab:hover {
+            background: rgba(231, 245, 255, 0.9);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #0066cc, #0052a3);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 32px;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: rgba(248, 249, 250, 0.9);
+            padding: 20px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            line-height: 1.6;
+            border: 1px solid rgba(225, 232, 237, 0.8);
+        }
+
+        #debug-toggle {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            background: linear-gradient(135deg, rgba(44, 62, 80, 0.9), rgba(52, 73, 94, 0.9));
+            color: white;
+            border: none;
+            border-radius: 16px;
+            padding: 12px 24px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            display: none; /* Hidden by default */
+        }
+
+        #debug-toggle:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        @media (max-width: 768px) {
+            #main-container {
+                padding: 16px;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            #chat-container {
+                padding: 20px;
+            }
+            
+            .message {
+                max-width: 90%;
+            }
+            
+            #input-container {
+                padding: 16px;
+            }
+            
+            #message-input {
+                padding: 12px 20px;
+            }
+            
+            #send-button {
+                width: 48px;
+                height: 48px;
+            }
+        }
+    </style>
+</head
+<body>
+    <script>
+        // Initialize debug mode immediately if on debug route
+        if (window.location.pathname.startsWith('/debug')) {
+            document.body.classList.add('debug-active');
+        }
+    </script>
+
+    <div id="main-container">
+        <div id="chat-section">
+            <div class="header">
+                <h1>Chat With AI Gavin</h1>
+            </div>
+            <div id="chat-container"></div>
+            <div id="input-container">
+                <input type="text" id="message-input" placeholder="Type your message..." />
+                <button id="send-button" onclick="sendMessage()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2L11 13M22 2L15 22L11 13M11 13L2 9" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <div id="debug-section">
+            <div id="debug-panel">
+                <div class="tabs">
+                    <div class="tab active" onclick="showTab('prompt-tab')">Prompt</div>
+                    <div class="tab" onclick="showTab('raw-tab')">Raw Debug</div>
+                </div>
+                
+                <div id="prompt-tab" class="tab-content active">
+                    <h3>Current Prompt</h3>
+                    <pre id="prompt-content">No prompt generated yet.</pre>
+                </div>
+                
+                <div id="raw-tab" class="tab-content">
+                    <h3>Raw Debug Data</h3>
+                    <pre id="raw-debug">No data available</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button id="debug-toggle" onclick="toggleDebug()">Show Debug Panel</button>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const debugToggle = document.getElementById('debug-toggle');
+        const debugSection = document.getElementById('debug-section');
+        const promptContent = document.getElementById('prompt-content');
+        const rawDebug = document.getElementById('raw-debug');
+        let history = [];
+        let debugData = {};
+        let debugPollingInterval;
+
+        // Check if we're on the debug route
+        const isDebugRoute = window.location.pathname.startsWith('/debug');
+        
+        // Initialize debug mode
+        if (isDebugRoute) {
+            debugToggle.style.display = 'block';
+            document.body.classList.add('debug-active');
+            refreshDebugInfo();
+            startDebugPolling();
+        }
+
+        function toggleDebug() {
+            if (!isDebugRoute) return;
+            
+            const isDebugVisible = document.body.classList.contains('debug-active');
+            
+            if (!isDebugVisible) {
+                document.body.classList.add('debug-active');
+                debugToggle.textContent = 'Hide Debug Panel';
+                refreshDebugInfo();
+                startDebugPolling();
+            } else {
+                document.body.classList.remove('debug-active');
+                debugToggle.textContent = 'Show Debug Panel';
+                stopDebugPolling();
+            }
+        }
+
+        function showTab(tabId) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Deactivate all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show the selected tab content
+            document.getElementById(tabId).classList.add('active');
+            
+            // Activate the clicked tab
+            const tabs = Array.from(document.querySelectorAll('.tab'));
+            const tabIndex = ['prompt-tab', 'raw-tab'].indexOf(tabId);
+            if (tabIndex >= 0 && tabIndex < tabs.length) {
+                tabs[tabIndex].classList.add('active');
+            }
+        }
+
+        function startDebugPolling() {
+            if (!debugPollingInterval) {
+                debugPollingInterval = setInterval(refreshDebugInfo, 5000);
+            }
+        }
+        
+        function stopDebugPolling() {
+            if (debugPollingInterval) {
+                clearInterval(debugPollingInterval);
+                debugPollingInterval = null;
+            }
+        }
+
+        function refreshDebugInfo() {
+            try {
+                fetch('/debug/info')
+                    .then(response => response.json())
+                    .then(data => {
+                        debugData = data;
+                        
+                        // Update prompt tab
+                        promptContent.textContent = data.last_prompt || "No prompt generated yet.";
+                        
+                        // Update raw tab with formatted JSON
+                        const formattedJson = JSON.stringify(data, null, 2);
+                        rawDebug.textContent = formattedJson;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching debug info:', error);
+                        rawDebug.textContent = 'Error fetching debug data';
+                    });
+            } catch (error) {
+                console.error('Error in refreshDebugInfo:', error);
+            }
+        }
+
+        function addMessage(text, isUser, isError = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : isError ? 'error-message' : 'ai-message'}`;
+            messageDiv.textContent = text;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Clear input immediately for better UX
+            messageInput.value = '';
+
+            // Disable input while processing
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+
+            // Add user message to chat
+            addMessage(message, true);
+            history.push(`User: ${message}`);
+
+            try {
+                const requestBody = {
+                    message: message,
+                    history: history
+                };
+                
+                const response = await fetch('/chat/gavinwood', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP error ${response.status}: ${errorText}`);
+                }
+
+                const reader = response.body.getReader();
+                let aiResponse = '';
+                let errorOccurred = false;
+
+                while (true) {
+                    const {value, done} = await reader.read();
+                    if (done) break;
+                    
+                    const text = new TextDecoder().decode(value);
+                    
+                    const lines = text.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const jsonText = line.slice(6);
+                                
+                                // Check if it's an error message from our API
+                                if (jsonText.includes('"error"')) {
+                                    const errorData = JSON.parse(jsonText);
+                                    if (errorData.error) {
+                                        const errorMessage = `API Error: ${errorData.error}`;
+                                        console.error(errorMessage);
+                                        addMessage(errorMessage, false, true);
+                                        errorOccurred = true;
+                                        continue;
+                                    }
+                                }
+
+                                const data = JSON.parse(jsonText);
+                                if (data.choices && data.choices[0].delta && data.choices[0].delta.content) {
+                                    aiResponse += data.choices[0].delta.content;
+                                    // Update the last AI message
+                                    const lastMessage = chatContainer.lastElementChild;
+                                    if (lastMessage && lastMessage.classList.contains('ai-message')) {
+                                        lastMessage.textContent = aiResponse;
+                                    } else if (!errorOccurred) {
+                                        addMessage(aiResponse, false);
+                                    }
+                                }
+                            } catch (e) {
+                                const errorMsg = `JSON parse error: ${e.message}, Raw data: ${line.slice(6)}`;
+                                console.error(errorMsg);
+                                
+                                // Try to display the raw response if JSON parsing fails
+                                const rawResponse = line.slice(6);
+                                if (!errorOccurred && rawResponse) {
+                                    aiResponse += rawResponse;
+                                    const lastMessage = chatContainer.lastElementChild;
+                                    if (lastMessage && lastMessage.classList.contains('ai-message')) {
+                                        lastMessage.textContent = aiResponse;
+                                    } else {
+                                        addMessage(`Raw response: ${rawResponse}`, false);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!errorOccurred && aiResponse) {
+                    history.push(`Assistant: ${aiResponse}`);
+                }
+                
+                // Refresh debug info after response
+                if (debugSection.style.display === 'block') {
+                    refreshDebugInfo();
+                }
+                
+            } catch (error) {
+                const errorMessage = `Error: ${error.message}`;
+                console.error(errorMessage);
+                addMessage(errorMessage, false, true);
+            }
+
+            // Re-enable input
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+            messageInput.focus();
+        }
+
+        // Allow sending message with Enter key
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html> 
