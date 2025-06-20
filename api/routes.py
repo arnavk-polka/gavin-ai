@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, HTM
 from config import app, logger, openai_client, static_path, mem0_client
 from utils import preprocess_tweet, add_memory, get_relevant_memories
 from prompt_builder import craft
+from memory_routes import memory_router
 
 router = APIRouter()
 
@@ -148,15 +149,11 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
         logger.info(f"Processed query for Mem0: '{query_text}'")
         
         # Retrieve relevant memories with timeout to prevent blocking
-        memories = await get_memories_with_timeout(user_id, query_text, limit=4, timeout=2.0)
+        memories = await get_memories_with_timeout(user_id, query_text, limit=4, timeout=5.0)
         memories_with_scores = [(mem["memory"], mem.get("score", 0.0)) for mem in memories]
-        logger.info(f"Retrieved {len(memories_with_scores)} memories from Mem0")
-        for i, (mem, score) in enumerate(memories_with_scores):
-            logger.info(f"Memory {i+1}: [Score: {score:.3f}] {mem[:100]}...")
         
         # If scores are too low or no memories found, don't use memories
-        if not memories_with_scores or max(score for _, score in memories_with_scores) < 0.5:
-            logger.warning(f"Low relevance scores or no memories found. Max score: {max(score for _, score in memories_with_scores) if memories_with_scores else 0:.3f}")
+        if not memories_with_scores or max(score for _, score in memories_with_scores) < 0.3:
             memories_with_scores = []  # Clear memories if they're not relevant enough
         
         # Build persona context
@@ -198,17 +195,15 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
             user_question = message['message']
             
             # Create system prompt without the user question
-            system_prompt_parts = prompt.split('Respond directly to the user\'s query: "')[0]
-            system_prompt = system_prompt_parts + """
-Important Instructions:
-1. You are Gavin Wood. Stay in character at all times.
-2. Keep your response concise — usually 2–4 sentences max depending on the type of question asked.
-3. Provide technical accuracy without over-explaining.
-4. Use memories only if directly relevant to the query.
-5. Never break character or sound like an AI.
-6. Avoid any customer support phrasing.
-7. Respond now as Gavin Wood to the user's question.
-"""
+            system_prompt = prompt.split('CURRENT USER QUERY: "')[0]
+
+            # Log what's being sent to OpenAI
+            # logger.info(f"=== OpenAI Request ===")
+            # logger.info(f"Full prompt length: {len(prompt)} characters")
+            # logger.info(f"System prompt length: {len(system_prompt)} characters")
+            # logger.info(f"User question: {user_question}")
+            # logger.info(f"System prompt content:\n{system_prompt}")
+            # logger.info(f"=== End OpenAI Request ===")
             
             response = await openai_client.chat.completions.create(
                 model="gpt-4o",
@@ -218,6 +213,8 @@ Important Instructions:
                 ],
                 temperature=1.2,  # Increased for more personality
                 top_p=0.5,  # Reduced for more focused responses
+                presence_penalty=0.6,
+                frequency_penalty=0.3,
                 stream=True
             )
             full_response = ""
@@ -256,4 +253,7 @@ async def get_debug_info():
         }
     })
 
+
+
 app.include_router(router)
+app.include_router(memory_router)
