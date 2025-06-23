@@ -99,6 +99,11 @@ if not mem0_api_key:
 
 mem0_client = MemoryClient(api_key=mem0_api_key)
 
+# Initialize SERPER API key (optional - only needed for web search)
+serper_api_key = os.getenv("SERPER_API_KEY", None)
+if not serper_api_key:
+    logger.warning("SERPER_API_KEY environment variable not set. Web search functionality will be disabled.")
+
 # Configure Mem0 with async-aware embedder
 class AsyncEmbedder:
     def __init__(self):

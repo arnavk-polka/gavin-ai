@@ -13,7 +13,7 @@ def preprocess_context_memory(text: str) -> str:
     text = ' '.join(text.split())  # Normalize whitespace
     return text.strip()
 
-def craft(persona, memories_with_scores, history, extra_persona_context=""):
+async def craft(persona, memories_with_scores, history, extra_persona_context="", should_search_web_func=None, search_serper_func=None):
     """
     Build a prompt incorporating persona summary, memories, history, and extra context, with Gavin Wood's specific traits.
 
@@ -22,6 +22,8 @@ def craft(persona, memories_with_scores, history, extra_persona_context=""):
         memories_with_scores: list of tuples (memory text, relevance score)
         history: list of previous messages (strings in format "Role: message")
         extra_persona_context: optional extra string to prepend to prompt
+        should_search_web_func: function to check if web search is needed
+        search_serper_func: function to perform SERPER search
 
     Returns:
         str: The crafted prompt string
@@ -78,6 +80,33 @@ def craft(persona, memories_with_scores, history, extra_persona_context=""):
     if not user_query:
         user_query = "I couldn't find your query. Could you please ask something specific?"
         logger.info("No query extracted; instructing AI to ask for clarification.")
+
+    # Check if we should search the web and add results if needed
+    search_results = ""
+    logger.info(f"=== SERPER SEARCH LOGIC START ===")
+    logger.info(f"User query: '{user_query}'")
+    logger.info(f"should_search_web_func provided: {should_search_web_func is not None}")
+    logger.info(f"search_serper_func provided: {search_serper_func is not None}")
+    
+    if user_query and user_query != "I couldn't find your query. Could you please ask something specific?":
+        logger.info("User query is valid, proceeding with search check")
+        if should_search_web_func and search_serper_func:
+            logger.info("Both search functions provided, calling should_search_web")
+            should_search = await should_search_web_func(user_query)
+            logger.info(f"should_search_web returned: {should_search}")
+            if should_search:
+                logger.info(f"Performing web search for query: {user_query}")
+                search_results = await search_serper_func(user_query, num_results=3)
+                logger.info(f"SERPER search completed. Results length: {len(search_results)} chars")
+            else:
+                logger.info("Web search not needed for this query")
+        else:
+            logger.warning("Search functions not provided - skipping web search")
+    else:
+        logger.info("User query is invalid or empty - skipping web search")
+    
+    logger.info(f"=== SERPER SEARCH LOGIC END ===")
+    logger.info(f"Final search_results length: {len(search_results)} chars")
 
     gavin_persona_instructions = """Persona Instructions:
 
@@ -136,6 +165,10 @@ AVOID:
 
     prompt_parts.append(gavin_persona_instructions)
 
+    # Add search results if available
+    if search_results:
+        prompt_parts.append(search_results)
+
     task_instructions = f"""Important Instructions:
 1. You are Gavin Wood. Stay in character at all times.
 2. Keep your response concise — usually 2–3 sentences max depending on the type of question asked.
@@ -143,7 +176,8 @@ AVOID:
 4. Use memories only if directly relevant to the query.
 5. Never break character or sound like an AI.
 6. Avoid any customer support phrasing.
-7. Respond now as Gavin Wood.
+7. If web search results are provided above, use them to inform your response with current information, but integrate them naturally into your persona.
+8. Respond now as Gavin Wood.
 
 CURRENT USER QUERY: "{user_query}"
 """

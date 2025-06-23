@@ -4,7 +4,8 @@ services:
     environment:
       - OPENAI_API_KEY
       - TWITTER_API_KEY
-      - MEM0_API_KEY                 # <── pass through for clarity
+      - MEM0_API_KEY 
+      - SERPER_API_KEY               # <── pass through for clarity
       - PORT=8001
        # start only after Chroma is up
     ports:
