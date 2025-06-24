@@ -10,6 +10,7 @@ from config import app, logger, openai_client, static_path, mem0_client
 from utils import preprocess_tweet, add_memory, get_relevant_memories
 from prompt_builder import craft
 from memory_routes import memory_router
+from analyze_routes import analyze_router
 import time
 
 router = APIRouter()
@@ -458,6 +459,55 @@ async def get_debug_info():
             "hint": "Visit / to access the chat interface"
         }
     })
+    
+    
+@router.get("/dashboard")
+async def serve_dashboard():
+    """Serve the analyze dashboard."""
+    dashboard_path = os.path.join(static_path, "dashboard.html")
+    if os.path.isfile(dashboard_path):
+        return FileResponse(dashboard_path)
+    else:
+        return HTMLResponse(
+            content="<h1>Dashboard Not Found</h1><p>dashboard.html not found in static directory.</p>",
+            status_code=404
+        )
+
+@router.get("/dashboard/")
+async def serve_dashboard_slash():
+    """Serve the analyze dashboard with trailing slash."""
+    return await serve_dashboard()
+    
+    
+@router.get("/multi-turn")
+async def serve_multi_turn():
+    """Serve the multi-turn test interface."""
+    multi_turn_path = os.path.join(static_path, "multi-turn.html")
+    if os.path.isfile(multi_turn_path):
+        return FileResponse(multi_turn_path)
+    else:
+        return HTMLResponse(
+            content="<h1>Multi-Turn Test Interface Not Found</h1><p>multi-turn.html not found in static directory.</p>",
+            status_code=404
+        )
+
+@router.get("/content-analysis")
+async def serve_content_analysis():
+    """Serve the content analysis page."""
+    content_analysis_path = os.path.join(static_path, "content-analysis.html")
+    if os.path.isfile(content_analysis_path):
+        return FileResponse(content_analysis_path)
+    else:
+        return HTMLResponse(
+            content="<h1>Content Analysis Page Not Found</h1><p>content-analysis.html not found in static directory.</p>",
+            status_code=404
+        )
+
+@router.get("/content-analysis/")
+async def serve_content_analysis_slash():
+    """Serve the content analysis page with trailing slash."""
+    return await serve_content_analysis()
+
 
 @router.get("/debug/test-serper")
 async def test_serper_endpoint():
@@ -553,3 +603,4 @@ async def test_network_connectivity():
 
 app.include_router(router)
 app.include_router(memory_router)
+app.include_router(analyze_router)

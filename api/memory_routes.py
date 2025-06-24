@@ -1,9 +1,9 @@
 import json
 import asyncio
 from fastapi import APIRouter, HTTPException, File, Form, UploadFile
-from typing import Optional
+from typing import Optional, List, Dict
 from config import logger, mem0_client, get_embedder
-from utils import add_memory, get_relevant_memories
+from utils import add_memory, get_relevant_memories, add_graph_memory, get_graph_memories, build_knowledge_graph, extract_entities, extract_relationships
 
 memory_router = APIRouter(prefix="/memory", tags=["memory"])
 
@@ -38,6 +38,68 @@ async def add_memory_endpoint(data: dict):
         logger.error(f"Error in add_memory endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@memory_router.post("/add-graph")
+async def add_graph_memory_endpoint(data: dict):
+    """Add a graph-structured memory with entities and relationships.
+    
+    Request body:
+    {
+        "user_id": "gavinwood",  // optional, defaults to gavinwood
+        "message": "Your memory content here",
+        "entities": ["Entity1", "Entity2"],  // optional, will be auto-extracted
+        "relationships": [  // optional, will be auto-extracted
+            {
+                "source": "Entity1",
+                "target": "Entity2", 
+                "relationship": "created",
+                "confidence": 0.8
+            }
+        ],
+        "metadata": {"key": "value"}  // optional
+    }
+    """
+    try:
+        user_id = data.get("user_id", "gavinwood")
+        message = data.get("message")
+        entities = data.get("entities")
+        relationships = data.get("relationships")
+        metadata = data.get("metadata", {})
+        
+        if not message:
+            raise HTTPException(status_code=400, detail="Message is required")
+        
+        # Use the utility function to add graph memory
+        success = await asyncio.to_thread(
+            add_graph_memory, 
+            mem0_client, 
+            user_id, 
+            f"Assistant: {message}", 
+            entities, 
+            relationships, 
+            metadata
+        )
+        
+        if success:
+            # Extract entities and relationships for response
+            if not entities:
+                entities = await asyncio.to_thread(extract_entities, message)
+            if not relationships:
+                relationships = await asyncio.to_thread(extract_relationships, message, entities or [])
+                
+            return {
+                "status": "success",
+                "message": "Graph memory added successfully",
+                "user_id": user_id,
+                "entities": entities,
+                "relationships": relationships
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to add graph memory")
+            
+    except Exception as e:
+        logger.error(f"Error in add_graph_memory endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @memory_router.post("/search")
 async def search_memories_endpoint(data: dict):
     """Search memories in mem0.
@@ -70,6 +132,136 @@ async def search_memories_endpoint(data: dict):
         
     except Exception as e:
         logger.error(f"Error in search_memories endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@memory_router.post("/search-graph")
+async def search_graph_memories_endpoint(data: dict):
+    """Search graph memories by entity or relationship.
+    
+    Request body:
+    {
+        "user_id": "gavinwood",  // optional, defaults to gavinwood
+        "entity": "Ethereum",  // required - entity to search for
+        "relationship_type": "created",  // optional - filter by relationship type
+        "limit": 10  // optional, defaults to 10
+    }
+    """
+    try:
+        user_id = data.get("user_id", "gavinwood")
+        entity = data.get("entity")
+        relationship_type = data.get("relationship_type")
+        limit = data.get("limit", 10)
+        
+        if not entity:
+            raise HTTPException(status_code=400, detail="Entity is required")
+        
+        # Use the utility function to search graph memories
+        memories = await asyncio.to_thread(
+            get_graph_memories, 
+            mem0_client, 
+            user_id, 
+            entity, 
+            relationship_type, 
+            limit
+        )
+        
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "entity": entity,
+            "relationship_type": relationship_type,
+            "memories": memories,
+            "count": len(memories)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in search_graph_memories endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@memory_router.get("/graph/{user_id}")
+async def get_knowledge_graph_endpoint(user_id: str = "gavinwood"):
+    """Build and return the knowledge graph for a user.
+    
+    Path parameters:
+    - user_id: User ID (defaults to gavinwood)
+    """
+    try:
+        # Build the knowledge graph
+        graph = await asyncio.to_thread(build_knowledge_graph, mem0_client, user_id)
+        
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "graph": graph
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in get_knowledge_graph endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@memory_router.post("/entities/extract")
+async def extract_entities_endpoint(data: dict):
+    """Extract entities from text.
+    
+    Request body:
+    {
+        "text": "Your text here"
+    }
+    """
+    try:
+        text = data.get("text")
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Text is required")
+        
+        # Extract entities
+        entities = await asyncio.to_thread(extract_entities, text)
+        
+        return {
+            "status": "success",
+            "text": text,
+            "entities": entities,
+            "count": len(entities)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in extract_entities endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@memory_router.post("/relationships/extract")
+async def extract_relationships_endpoint(data: dict):
+    """Extract relationships from text.
+    
+    Request body:
+    {
+        "text": "Your text here",
+        "entities": ["Entity1", "Entity2"]  // optional, will be auto-extracted
+    }
+    """
+    try:
+        text = data.get("text")
+        entities = data.get("entities")
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Text is required")
+        
+        # Extract entities if not provided
+        if not entities:
+            entities = await asyncio.to_thread(extract_entities, text)
+        
+        # Extract relationships
+        relationships = await asyncio.to_thread(extract_relationships, text, entities)
+        
+        return {
+            "status": "success",
+            "text": text,
+            "entities": entities,
+            "relationships": relationships,
+            "count": len(relationships)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in extract_relationships endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @memory_router.get("/list/{user_id}")

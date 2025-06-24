@@ -1,12 +1,18 @@
+version: '3.8'
+
 services:
   api:
     build: ./api
     environment:
-      - OPENAI_API_KEY
-      - TWITTER_API_KEY
-      - MEM0_API_KEY 
-      - SERPER_API_KEY               # <── pass through for clarity
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MEM0_API_KEY=${MEM0_API_KEY}
+      - NEO4J_URL=${NEO4J_URL}
+      - NEO4J_USERNAME=${NEO4J_USERNAME}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - NEO4J_DATABASE=${NEO4J_DATABASE:-neo4j}
+      - SERPER_API_KEY       
       - PORT=8001
-       # start only after Chroma is up
+    volumes:
+      - ./api:/app
     ports:
       - "8001:8001"
