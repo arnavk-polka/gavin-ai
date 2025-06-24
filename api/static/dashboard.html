@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gavin AI - Stress Test Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+        }
+
+        .upload-section {
+            text-align: center;
+        }
+
+        .upload-box {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 40px;
+            margin: 20px 0;
+            transition: border-color 0.3s ease;
+        }
+
+        .upload-box:hover {
+            border-color: #667eea;
+        }
+
+        .upload-box.dragover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: opacity 0.3s ease;
+        }
+
+        .upload-btn:hover {
+            opacity: 0.9;
+        }
+
+        .upload-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .start-test-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        .start-test-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .progress-section {
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-pending { background-color: #ffc107; }
+        .status-running { background-color: #007bff; animation: pulse 1.5s infinite; }
+        .status-completed { background-color: #28a745; }
+        .status-failed { background-color: #dc3545; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .metric-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .results-section {
+            display: none;
+        }
+
+        .result-item {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .result-header {
+            background: #f8f9fa;
+            padding: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .result-score {
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: white;
+        }
+
+        .score-excellent { background-color: #28a745; }
+        .score-good { background-color: #17a2b8; }
+        .score-fair { background-color: #ffc107; color: #333; }
+        .score-poor { background-color: #dc3545; }
+
+        .result-details {
+            padding: 15px;
+            display: none;
+            background: white;
+        }
+
+        .result-details.show {
+            display: block;
+        }
+
+        .text-area {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: inherit;
+            resize: vertical;
+        }
+
+        .session-name-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+        }
+
+        .alert-info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
+
+        .alert-success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+
+        .tab-container {
+            margin-top: 20px;
+        }
+
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            margin: 0 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .tab-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .tab-btn.active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .conversation-input {
+            margin: 20px 0;
+        }
+
+        .message {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .message-content {
+            flex-grow: 1;
+        }
+
+        .message-role {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .message-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .message-input .text-area {
+            flex-grow: 1;
+            min-height: 100px;
+        }
+
+        .add-message-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .add-message-btn:hover {
+            background: #5a6fd6;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .chat-message {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-message.user {
+            align-items: flex-end;
+        }
+
+        .chat-message.bot {
+            align-items: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin: 4px 0;
+        }
+
+        .user .message-bubble {
+            background: #667eea;
+            color: white;
+        }
+
+        .bot .message-bubble {
+            background: #e9ecef;
+            color: #333;
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 10px;
+            padding: 15px;
+            background: white;
+            border-radius: 0 0 8px 8px;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .chat-input .text-area {
+            min-height: 60px;
+            margin: 0;
+        }
+
+        .send-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .send-btn:hover {
+            background: #5a6fd6;
+        }
+
+        .send-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Gavin AI Stress Test Dashboard</h1>
+            <div class="tab-container">
+    <button class="tab-btn active" onclick="switchTab('transcript')">Transcript Test</button>
+    <button class="tab-btn" onclick="switchTab('multi-turn')">Multi-Turn Test</button>
+    <button class="tab-btn" onclick="window.location.href='/content-analysis'">Content Analysis</button>
+</div>
+
+        </div>
+
+        <!-- Transcript Test Section -->
+        <div class="card upload-section" id="transcript-section">
+            <h2>Start New Transcript Test</h2>
+            
+            <div class="upload-box" id="uploadBox">
+                <h3>Upload Podcast Transcript</h3>
+                <p>Drag and drop a text file here, or click to select</p>
+                <input type="file" class="file-input" id="fileInput" accept=".txt,.md">
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    Select File
+                </button>
+            </div>
+            
+            <div id="fileInfo" style="display: none;">
+                <p><strong>Selected:</strong> <span id="fileName"></span></p>
+                <p><strong>Size:</strong> <span id="fileSize"></span></p>
+            </div>
+            
+            <textarea class="text-area" id="transcriptText" placeholder="Or paste your podcast transcript directly here..."></textarea>
+            
+            <button class="start-test-btn" id="startTestBtn" onclick="startStressTest()" disabled>
+                Start Transcript Test
+            </button>
+        </div>
+
+        <!-- Multi-Turn Test Section -->
+        <div class="card upload-section" id="multi-turn-section" style="display: none;">
+            <h2>Multi-Turn Test</h2>
+            
+            <div class="chat-container">
+                <div class="chat-messages" id="chatMessages">
+                    <!-- Chat messages will appear here -->
+                </div>
+                
+                <div class="chat-input">
+                    <textarea class="text-area" id="chatInput" placeholder="Type your message here..." rows="3"></textarea>
+                    <button class="send-btn" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+            
+            <div class="test-controls" style="margin-top: 20px;">
+                <button class="start-test-btn" id="startMultiTurnBtn" onclick="startMultiTurnTest()" disabled>
+                    Start Test Analysis
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="card progress-section" id="progressSection">
+            <h2>Test Progress</h2>
+            
+            <div id="currentStatus">
+                <p><span class="status-indicator status-pending" id="statusIndicator"></span>
+                <span id="statusText">Waiting to start...</span></p>
+            </div>
+            
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p id="progressText">0% complete</p>
+            
+            <div id="stepDetails">
+                <p><strong>Current Step:</strong> <span id="currentStep">-</span></p>
+                <p><strong>Questions:</strong> <span id="questionProgress">0/0</span></p>
+                <p><strong>Duration:</strong> <span id="duration">00:00</span></p>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="card results-section" id="resultsSection">
+            <h2>Test Results</h2>
+            
+            <div id="overallMetrics" class="metrics-grid">
+                <!-- Metrics will be populated here -->
+            </div>
+            
+            <h3 style="margin-top: 30px;">Detailed Results</h3>
+            <div id="detailedResults">
+                <!-- Individual question results will be populated here -->
+            </div>
+        </div>
+
+        <!-- Alerts -->
+        <div id="alerts"></div>
+    </div>
+
+    <script>
+        let currentSessionId = null;
+        let statusCheckInterval = null;
+        let startTime = null;
+        let currentTab = 'transcript';
+        let conversationMessages = [];
+        let chatMessages = [];
+        let isTestMode = false;
+
+        // File upload handling
+        const fileInput = document.getElementById('fileInput');
+        const uploadBox = document.getElementById('uploadBox');
+        const transcriptText = document.getElementById('transcriptText');
+        const startTestBtn = document.getElementById('startTestBtn');
+
+        fileInput.addEventListener('change', handleFileSelect);
+        transcriptText.addEventListener('input', updateStartButton);
+
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.classList.add('dragover');
+        });
+
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.classList.remove('dragover');
+        });
+
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect();
+            }
+        });
+
+        function handleFileSelect() {
+            const file = fileInput.files[0];
+            if (file) {
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('fileSize').textContent = formatFileSize(file.size);
+                document.getElementById('fileInfo').style.display = 'block';
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    transcriptText.value = e.target.result;
+                    updateStartButton();
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function updateStartButton() {
+            const hasContent = transcriptText.value.trim().length > 0;
+            startTestBtn.disabled = !hasContent;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        async function startStressTest() {
+            const transcriptContent = transcriptText.value.trim();
+            
+            if (!transcriptContent) {
+                showAlert('Please provide transcript content', 'danger');
+                return;
+            }
+
+            try {
+                startTestBtn.disabled = true;
+                startTestBtn.innerHTML = '<div class="loading"></div> Starting Test...';
+
+                const response = await fetch('/analyze/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        transcript: transcriptContent
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    currentSessionId = result.session_id;
+                    startTime = Date.now();
+                    showProgressSection();
+                    startStatusCheck();
+                    showAlert(`Analysis started: ${result.session_name}`, 'success');
+                } else {
+                    throw new Error(result.detail || 'Failed to start analysis');
+                }
+            } catch (error) {
+                console.error('Error starting analysis:', error);
+                showAlert('Error starting analysis: ' + error.message, 'danger');
+            } finally {
+                startTestBtn.disabled = false;
+                startTestBtn.innerHTML = 'Start Analysis';
+            }
+        }
+
+        function showProgressSection() {
+            document.getElementById('progressSection').style.display = 'block';
+            document.querySelector('.upload-section').style.display = 'none';
+        }
+
+        function startStatusCheck() {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+            
+            statusCheckInterval = setInterval(checkStatus, 2000);
+            checkStatus(); // Initial check
+        }
+
+        async function checkStatus() {
+            if (!currentSessionId) return;
+
+            try {
+                const endpoint = currentTab === 'transcript' ? '/analyze/status' : '/analyze/multi-turn/status';
+                const response = await fetch(endpoint);
+                const status = await response.json();
+                
+                if (status) {
+                    updateProgressDisplay(status);
+                    
+                    if (status.status === 'completed') {
+                        clearInterval(statusCheckInterval);
+                        await loadDetailedResults();
+                        showAlert('Test completed successfully!', 'success');
+                    } else if (status.status === 'failed') {
+                        clearInterval(statusCheckInterval);
+                        showAlert('Test failed: ' + (status.error || 'Unknown error'), 'danger');
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking status:', error);
+            }
+        }
+
+        function updateProgressDisplay(status) {
+            const statusIndicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            const currentStep = document.getElementById('currentStep');
+            const questionProgress = document.getElementById('questionProgress');
+            const duration = document.getElementById('duration');
+
+            // Update status
+            statusIndicator.className = `status-indicator status-${status.status === 'completed' ? 'completed' : 'running'}`;
+            statusText.textContent = getStatusText(status.status);
+
+            // Update progress
+            const progress = calculateProgress(status);
+            progressFill.style.width = progress + '%';
+            progressText.textContent = Math.round(progress) + '% complete';
+
+            // Update step details
+            currentStep.textContent = status.progress.current_step.replace('_', ' ');
+            
+            // Show/hide and update questions progress based on test type
+            if (currentTab === 'transcript') {
+                questionProgress.parentElement.style.display = 'block';
+                questionProgress.textContent = `${status.progress.questions_completed}/${status.progress.questions_total}`;
+            } else {
+                questionProgress.parentElement.style.display = 'none';
+            }
+            
+            // Update duration
+            if (startTime) {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                duration.textContent = formatDuration(elapsed);
+            }
+
+            // Show metrics if available
+            if (status.aggregate_metrics) {
+                showMetrics(status.aggregate_metrics);
+            }
+        }
+
+        function calculateProgress(status) {
+            if (currentTab === 'transcript') {
+                const step = status.progress.current_step;
+                const questionsTotal = status.progress.questions_total || 1;
+                const questionsCompleted = status.progress.questions_completed || 0;
+                
+                switch (step) {
+                    case 'parsing_transcript': return 10;
+                    case 'testing_responses': 
+                        return 20 + (questionsCompleted / questionsTotal) * 50;
+                    case 'evaluating_responses': return 70 + (questionsCompleted / questionsTotal) * 20;
+                    case 'calculating_metrics': return 95;
+                    case 'completed': return 100;
+                    default: return 0;
+                }
+            } else {
+                // For multi-turn tests
+                if (status.status === 'completed') {
+                    return 100;
+                }
+                const totalMessages = status.progress.total_messages || 1;
+                const processedMessages = status.progress.processed_messages || 0;
+                return (processedMessages / totalMessages) * 100;
+            }
+        }
+
+        function getStatusText(status) {
+            if (currentTab === 'transcript') {
+                const statusTexts = {
+                    'parsing_transcript': 'Parsing transcript and extracting Q&A pairs...',
+                    'testing_responses': 'Testing bot responses to questions...',
+                    'evaluating_responses': 'Evaluating response quality...',
+                    'calculating_metrics': 'Calculating final metrics...',
+                    'completed': 'Test completed successfully!',
+                    'failed': 'Test failed'
+                };
+                return statusTexts[status] || 'Processing...';
+            } else {
+                const statusTexts = {
+                    'processing': 'Processing conversation turns...',
+                    'completed': 'Test completed successfully!',
+                    'failed': 'Test failed'
+                };
+                return statusTexts[status] || 'Processing...';
+            }
+        }
+
+        function formatDuration(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        function showMetrics(metrics) {
+            const metricsContainer = document.getElementById('overallMetrics');
+            if (currentTab === 'transcript') {
+                // Check if MT-Bench data is available
+                if (metrics.evaluation_method === 'mt_bench' && metrics.dimension_averages) {
+                    // Show MT-Bench dimension scores
+                    metricsContainer.innerHTML = `
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_overall_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Overall Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_relevance * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Relevance</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_accuracy * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Accuracy</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_clarity * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Clarity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_depth * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Depth</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_helpfulness * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Helpfulness</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.pass_rate * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Pass Rate</div>
+                        </div>
+                    `;
+                } else {
+                    // Show legacy metrics
+                    metricsContainer.innerHTML = `
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_overall_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Overall Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_content_similarity * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Content Similarity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_style_fidelity * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Style Fidelity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.pass_rate * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Pass Rate</div>
+                        </div>
+                    `;
+                }
+            } else {
+                // Check if MT-Bench data is available for multi-turn
+                if (metrics.evaluation_method === 'mt_bench' && metrics.dimension_averages) {
+                    // Show MT-Bench dimension scores for multi-turn
+                    metricsContainer.innerHTML = `
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_overall_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Overall Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_relevance * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Relevance</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_accuracy * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Accuracy</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_clarity * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Clarity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_depth * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Depth</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_helpfulness * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Helpfulness</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.pass_rate * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Pass Rate</div>
+                        </div>
+                    `;
+                } else {
+                    // Show legacy multi-turn metrics
+                    metricsContainer.innerHTML = `
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_overall_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Overall Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_relevance_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Relevance</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_consistency_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Consistency</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_technical_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Technical</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_clarity_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Clarity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_persona_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Persona</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.pass_rate * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Pass Rate</div>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        async function loadDetailedResults() {
+            try {
+                const endpoint = currentTab === 'transcript' ? '/analyze/results' : '/analyze/multi-turn/results';
+                const response = await fetch(endpoint);
+                const results = await response.json();
+                
+                if (results) {
+                    document.getElementById('resultsSection').style.display = 'block';
+                    displayDetailedResults(results);
+                }
+            } catch (error) {
+                console.error('Error loading detailed results:', error);
+            }
+        }
+
+        function displayDetailedResults(results) {
+            const container = document.getElementById('detailedResults');
+            
+            if (currentTab === 'transcript') {
+                const evaluatedResults = results.evaluated_results || [];
+                container.innerHTML = evaluatedResults.map((result, index) => {
+                    const score = result.evaluation?.overall_score || 0;
+                    const scoreClass = getScoreClass(score);
+                    const scoreText = (score * 100).toFixed(1) + '%';
+                    
+                    // Check if MT-Bench data is available
+                    const isMTBench = result.evaluation?.evaluation_method === 'mt_bench';
+                    const mtBenchScores = result.evaluation?.mt_bench_scores || {};
+                    
+                    return `
+                        <div class="result-item">
+                            <div class="result-header" onclick="toggleResult(${index})">
+                                <span><strong>Q${index + 1}:</strong> ${result.question.substring(0, 80)}${result.question.length > 80 ? '...' : ''}</span>
+                                <span class="result-score ${scoreClass}">${scoreText}</span>
+                            </div>
+                            <div class="result-details" id="result-${index}">
+                                <div style="margin-bottom: 15px;">
+                                    <strong>Question:</strong>
+                                    <p style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin: 5px 0;">${result.question}</p>
+                                </div>
+                                <div style="margin-bottom: 15px;">
+                                    <strong>Bot Response:</strong>
+                                    <p style="background: #e3f2fd; padding: 10px; border-radius: 4px; margin: 5px 0;">${result.bot_response || 'No response'}</p>
+                                </div>
+                                <div style="margin-bottom: 15px;">
+                                    <strong>Expected Answer:</strong>
+                                    <p style="background: #e8f5e8; padding: 10px; border-radius: 4px; margin: 5px 0;">${result.expected_answer || 'N/A'}</p>
+                                </div>
+                                ${result.evaluation ? `
+                                    <div style="margin-bottom: 15px;">
+                                        <strong>Evaluation (${isMTBench ? 'MT-Bench' : 'Legacy'}):</strong>
+                                        ${isMTBench ? `
+                                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                                                <h4 style="margin-bottom: 10px; color: #2c5aa0;">MT-Bench Dimension Scores:</h4>
+                                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 15px;">
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.relevance * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Relevance</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.accuracy * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Accuracy</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.clarity * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Clarity</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.depth * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Depth</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.helpfulness * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Helpfulness</div>
+                                                    </div>
+                                                </div>
+                                                <div style="margin-bottom: 10px;">
+                                                    <strong>Confidence:</strong> ${(result.evaluation.confidence * 100).toFixed(1)}%
+                                                </div>
+                                                ${result.evaluation.reasoning?.strengths && result.evaluation.reasoning.strengths.length > 0 ? `
+                                                    <div style="margin-bottom: 10px;">
+                                                        <strong>Strengths:</strong>
+                                                        <ul style="margin: 5px 0; padding-left: 20px;">
+                                                            ${result.evaluation.reasoning.strengths.map(strength => `<li>${strength}</li>`).join('')}
+                                                        </ul>
+                                                    </div>
+                                                ` : ''}
+                                                ${result.evaluation.reasoning?.weaknesses && result.evaluation.reasoning.weaknesses.length > 0 ? `
+                                                    <div style="margin-bottom: 10px;">
+                                                        <strong>Areas for Improvement:</strong>
+                                                        <ul style="margin: 5px 0; padding-left: 20px;">
+                                                            ${result.evaluation.reasoning.weaknesses.map(weakness => `<li>${weakness}</li>`).join('')}
+                                                        </ul>
+                                                    </div>
+                                                ` : ''}
+                                                <div>
+                                                    <strong>Detailed Analysis:</strong>
+                                                    <p style="background: white; padding: 10px; border-radius: 4px; margin: 5px 0; font-style: italic;">${result.evaluation.reasoning?.content_analysis || 'N/A'}</p>
+                                                </div>
+                                            </div>
+                                        ` : `
+                                            <p><strong>Content:</strong> ${(result.evaluation.content_similarity * 100).toFixed(1)}%</p>
+                                            <p><strong>Style:</strong> ${(result.evaluation.style_fidelity * 100).toFixed(1)}%</p>
+                                            <p><strong>Analysis:</strong> ${result.evaluation.reasoning?.content_analysis || 'N/A'}</p>
+                                        `}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                // Add MT-Bench summary section if available
+                if (results.mt_bench_analysis) {
+                    const mtBenchSection = document.createElement('div');
+                    mtBenchSection.className = 'card';
+                    mtBenchSection.innerHTML = `
+                        <h3 style="color: #2c5aa0; margin-bottom: 15px;">📊 MT-Bench Analysis Summary</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${(results.mt_bench_analysis.average_overall_score * 100).toFixed(1)}%</div>
+                                <div style="font-size: 0.9em; color: #666;">Average Overall Score</div>
+                            </div>
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${(results.mt_bench_analysis.pass_rate * 100).toFixed(1)}%</div>
+                                <div style="font-size: 0.9em; color: #666;">Pass Rate (≥70%)</div>
+                            </div>
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${results.mt_bench_analysis.total_evaluations}</div>
+                                <div style="font-size: 0.9em; color: #666;">Total Evaluations</div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <h4 style="color: #2c5aa0; margin-bottom: 10px;">Score Distribution:</h4>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <div style="background: #d4edda; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Excellent (≥90%):</strong> ${results.mt_bench_analysis.score_distribution.excellent || 0}
+                                </div>
+                                <div style="background: #d1ecf1; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Good (70-89%):</strong> ${results.mt_bench_analysis.score_distribution.good || 0}
+                                </div>
+                                <div style="background: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Fair (50-69%):</strong> ${results.mt_bench_analysis.score_distribution.fair || 0}
+                                </div>
+                                <div style="background: #f8d7da; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Poor (<50%):</strong> ${results.mt_bench_analysis.score_distribution.poor || 0}
+                                </div>
+                            </div>
+                        </div>
+                        ${results.mt_bench_analysis.common_strengths && results.mt_bench_analysis.common_strengths.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <h4 style="color: #28a745; margin-bottom: 8px;">✅ Common Strengths:</h4>
+                                <ul style="margin: 0; padding-left: 20px;">
+                                    ${results.mt_bench_analysis.common_strengths.map(strength => `<li>${strength}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                        ${results.mt_bench_analysis.common_weaknesses && results.mt_bench_analysis.common_weaknesses.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <h4 style="color: #dc3545; margin-bottom: 8px;">⚠️ Areas for Improvement:</h4>
+                                <ul style="margin: 0; padding-left: 20px;">
+                                    ${results.mt_bench_analysis.common_weaknesses.map(weakness => `<li>${weakness}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    `;
+                    container.appendChild(mtBenchSection);
+                }
+            } else {
+                const responses = results.responses || [];
+                container.innerHTML = responses.map((response, index) => {
+                    const score = response.evaluation?.overall_score || 0;
+                    const scoreClass = getScoreClass(score);
+                    const scoreText = (score * 100).toFixed(1) + '%';
+                    
+                    // Check if MT-Bench data is available for multi-turn
+                    const isMTBench = response.evaluation?.evaluation_method === 'mt_bench';
+                    const mtBenchScores = response.evaluation?.mt_bench_scores || {};
+                    
+                    return `
+                        <div class="result-item">
+                            <div class="result-header" onclick="toggleResult(${index})">
+                                <span><strong>Turn ${index + 1}:</strong> ${response.user_message.substring(0, 80)}${response.user_message.length > 80 ? '...' : ''}</span>
+                                <span class="result-score ${scoreClass}">${scoreText}</span>
+                            </div>
+                            <div class="result-details" id="result-${index}">
+                                <div style="margin-bottom: 15px;">
+                                    <strong>User Message:</strong>
+                                    <p style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin: 5px 0;">${response.user_message}</p>
+                                </div>
+                                <div style="margin-bottom: 15px;">
+                                    <strong>Bot Response:</strong>
+                                    <p style="background: #e3f2fd; padding: 10px; border-radius: 4px; margin: 5px 0;">${response.bot_response || 'No response'}</p>
+                                </div>
+                                ${response.evaluation ? `
+                                    <div style="margin-bottom: 15px;">
+                                        <strong>Evaluation (${isMTBench ? 'MT-Bench' : 'Legacy'}):</strong>
+                                        ${isMTBench ? `
+                                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                                                <h4 style="margin-bottom: 10px; color: #2c5aa0;">MT-Bench Dimension Scores:</h4>
+                                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 15px;">
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.relevance * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Relevance</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.accuracy * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Accuracy</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.clarity * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Clarity</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.depth * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Depth</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.helpfulness * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Helpfulness</div>
+                                                    </div>
+                                                </div>
+                                                <div style="margin-bottom: 10px;">
+                                                    <strong>Confidence:</strong> ${(response.evaluation.confidence * 100).toFixed(1)}%
+                                                </div>
+                                                <div>
+                                                    <strong>Detailed Analysis:</strong>
+                                                    <p style="background: white; padding: 10px; border-radius: 4px; margin: 5px 0; font-style: italic;">${response.evaluation.reasoning || 'N/A'}</p>
+                                                </div>
+                                            </div>
+                                        ` : `
+                                            <p><strong>Relevance:</strong> ${(response.evaluation.relevance_score * 100).toFixed(1)}%</p>
+                                            <p><strong>Consistency:</strong> ${(response.evaluation.consistency_score * 100).toFixed(1)}%</p>
+                                            <p><strong>Technical:</strong> ${(response.evaluation.technical_score * 100).toFixed(1)}%</p>
+                                            <p><strong>Clarity:</strong> ${(response.evaluation.clarity_score * 100).toFixed(1)}%</p>
+                                            <p><strong>Persona:</strong> ${(response.evaluation.persona_score * 100).toFixed(1)}%</p>
+                                            <p><strong>Analysis:</strong> ${response.evaluation.reasoning || 'N/A'}</p>
+                                        `}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                // Add MT-Bench summary section for multi-turn if available
+                if (results.mt_bench_analysis) {
+                    const mtBenchSection = document.createElement('div');
+                    mtBenchSection.className = 'card';
+                    mtBenchSection.innerHTML = `
+                        <h3 style="color: #2c5aa0; margin-bottom: 15px;">📊 MT-Bench Multi-Turn Analysis Summary</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${(results.mt_bench_analysis.average_overall_score * 100).toFixed(1)}%</div>
+                                <div style="font-size: 0.9em; color: #666;">Average Overall Score</div>
+                            </div>
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${(results.mt_bench_analysis.pass_rate * 100).toFixed(1)}%</div>
+                                <div style="font-size: 0.9em; color: #666;">Pass Rate (≥70%)</div>
+                            </div>
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${results.mt_bench_analysis.total_evaluations}</div>
+                                <div style="font-size: 0.9em; color: #666;">Total Responses</div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <h4 style="color: #2c5aa0; margin-bottom: 10px;">Score Distribution:</h4>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <div style="background: #d4edda; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Excellent (≥90%):</strong> ${results.mt_bench_analysis.score_distribution.excellent || 0}
+                                </div>
+                                <div style="background: #d1ecf1; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Good (70-89%):</strong> ${results.mt_bench_analysis.score_distribution.good || 0}
+                                </div>
+                                <div style="background: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Fair (50-69%):</strong> ${results.mt_bench_analysis.score_distribution.fair || 0}
+                                </div>
+                                <div style="background: #f8d7da; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Poor (<50%):</strong> ${results.mt_bench_analysis.score_distribution.poor || 0}
+                                </div>
+                            </div>
+                        </div>
+                        ${results.mt_bench_analysis.common_strengths && results.mt_bench_analysis.common_strengths.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <h4 style="color: #28a745; margin-bottom: 8px;">✅ Common Strengths:</h4>
+                                <ul style="margin: 0; padding-left: 20px;">
+                                    ${results.mt_bench_analysis.common_strengths.map(strength => `<li>${strength}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                        ${results.mt_bench_analysis.common_weaknesses && results.mt_bench_analysis.common_weaknesses.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <h4 style="color: #dc3545; margin-bottom: 8px;">⚠️ Areas for Improvement:</h4>
+                                <ul style="margin: 0; padding-left: 20px;">
+                                    ${results.mt_bench_analysis.common_weaknesses.map(weakness => `<li>${weakness}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    `;
+                    container.appendChild(mtBenchSection);
+                }
+            }
+        }
+
+        function getScoreClass(score) {
+            if (score >= 0.9) return 'score-excellent';
+            if (score >= 0.7) return 'score-good';
+            if (score >= 0.5) return 'score-fair';
+            return 'score-poor';
+        }
+
+        function toggleResult(index) {
+            const details = document.getElementById(`result-${index}`);
+            details.classList.toggle('show');
+        }
+
+        function showAlert(message, type) {
+            const alertsContainer = document.getElementById('alerts');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            alertsContainer.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            document.getElementById('transcript-section').style.display = tab === 'transcript' ? 'block' : 'none';
+            document.getElementById('multi-turn-section').style.display = tab === 'multi-turn' ? 'block' : 'none';
+        }
+
+        function addMessage() {
+            const messageText = document.getElementById('messageText').value.trim();
+            if (!messageText) return;
+            
+            conversationMessages.push({
+                role: 'user',
+                content: messageText
+            });
+            
+            updateConversationDisplay();
+            document.getElementById('messageText').value = '';
+            document.getElementById('startMultiTurnBtn').disabled = false;
+        }
+
+        function removeMessage(index) {
+            conversationMessages.splice(index, 1);
+            updateConversationDisplay();
+            document.getElementById('startMultiTurnBtn').disabled = conversationMessages.length === 0;
+        }
+
+        function updateConversationDisplay() {
+            const container = document.getElementById('conversationMessages');
+            container.innerHTML = conversationMessages.map((msg, index) => `
+                <div class="message">
+                    <div class="message-content">
+                        <span class="message-role">${msg.role}:</span>
+                        ${msg.content}
+                    </div>
+                    <div class="message-actions">
+                        <button onclick="removeMessage(${index})">Remove</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function startMultiTurnTest() {
+            if (chatMessages.length < 2) {
+                showAlert('Please have at least one exchange with the bot before starting the test', 'danger');
+                return;
+            }
+
+            try {
+                const startMultiTurnBtn = document.getElementById('startMultiTurnBtn');
+                startMultiTurnBtn.disabled = true;
+                startMultiTurnBtn.innerHTML = '<div class="loading"></div> Starting Test...';
+
+                const response = await fetch('/analyze/multi-turn/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        messages: chatMessages
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    currentSessionId = result.session_id;
+                    startTime = Date.now();
+                    showProgressSection();
+                    startStatusCheck();
+                    showAlert(`Multi-turn test started: ${result.session_name}`, 'success');
+                } else {
+                    throw new Error(result.detail || 'Failed to start multi-turn test');
+                }
+            } catch (error) {
+                console.error('Error starting multi-turn test:', error);
+                showAlert('Error starting multi-turn test: ' + error.message, 'danger');
+            } finally {
+                startMultiTurnBtn.disabled = false;
+                startMultiTurnBtn.innerHTML = 'Start Test Analysis';
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message
+            addChatMessage('user', message);
+            chatMessages.push({
+                role: 'user',
+                content: message
+            });
+            
+            // Clear input
+            input.value = '';
+            
+            // Get bot response
+            getBotResponse(message);
+        }
+
+        async function getBotResponse(message) {
+            try {
+                const response = await fetch('/chat/keonehon', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        history: chatMessages
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to get bot response');
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let botResponse = '';
+
+                while (true) {
+                    const {value, done} = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                if (data.choices && data.choices[0].delta.content) {
+                                    botResponse += data.choices[0].delta.content;
+                                    updateLastBotMessage(botResponse);
+                                }
+                            } catch (e) {
+                                console.error('Error parsing SSE data:', e);
+                            }
+                        }
+                    }
+                }
+
+                // Add bot message to history
+                chatMessages.push({
+                    role: 'assistant',
+                    content: botResponse
+                });
+
+                // Enable test button if we have enough messages
+                document.getElementById('startMultiTurnBtn').disabled = chatMessages.length < 2;
+                
+            } catch (error) {
+                console.error('Error getting bot response:', error);
+                addChatMessage('bot', 'Sorry, I encountered an error. Please try again.');
+            }
+        }
+
+        function addChatMessage(role, content) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${role}`;
+            messageDiv.innerHTML = `
+                <div class="message-bubble">${content}</div>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function updateLastBotMessage(content) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const lastMessage = messagesContainer.lastElementChild;
+            if (lastMessage && lastMessage.classList.contains('bot')) {
+                lastMessage.querySelector('.message-bubble').textContent = content;
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            } else {
+                addChatMessage('bot', content);
+            }
+        }
+
+        // Add event listener for Enter key in chat input
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Content Analysis
+        document.getElementById('startContentAnalysis').addEventListener('click', async function() {
+            const content = document.getElementById('contentInput').value.trim();
+            if (!content) {
+                alert('Please enter some content to analyze');
+                return;
+            }
+
+            const resultsSection = document.getElementById('contentResults');
+            const contentStatus = document.getElementById('contentStatus');
+            const contentAnalysis = document.getElementById('contentAnalysis');
+            const keoneResponse = document.getElementById('keoneResponse');
+            const keoneResponseContent = document.getElementById('keoneResponseContent');
+
+            resultsSection.style.display = 'block';
+            contentStatus.className = 'status-indicator status-running';
+            contentAnalysis.innerHTML = 'Analyzing...';
+            keoneResponse.style.display = 'none';
+
+            try {
+                const response = await fetch('/analyze/content', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ text: content })
+                });
+
+                const data = await response.json();
+                
+                contentStatus.className = 'status-indicator status-completed';
+                contentAnalysis.innerHTML = data.analysis;
+
+                if (data.is_promptable) {
+                    keoneResponse.style.display = 'block';
+                    keoneResponseContent.innerHTML = data.response;
+                }
+            } catch (error) {
+                contentStatus.className = 'status-indicator status-failed';
+                contentAnalysis.innerHTML = 'Error analyzing content: ' + error.message;
+            }
+        });
+
+        // Initialize
+        updateStartButton();
+    </script>
+</body>
+</html> 

@@ -3,7 +3,7 @@ import os
 import asyncio
 from sentence_transformers import SentenceTransformer
 from openai import AsyncOpenAI
-from mem0 import MemoryClient
+from mem0 import Memory
 from utils import add_memory
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -97,7 +97,7 @@ if not mem0_api_key:
     logger.error("MEM0_API_KEY environment variable not set.")
     raise ValueError("MEM0_API_KEY environment variable not set.")
 
-mem0_client = MemoryClient(api_key=mem0_api_key)
+
 
 # Initialize SERPER API key (optional - only needed for web search)
 serper_api_key = os.getenv("SERPER_API_KEY", None)
@@ -120,19 +120,65 @@ class AsyncEmbedder:
 async_embedder = AsyncEmbedder()
 
 # Configure Mem0 with async-aware embedder  
-mem0_config = {
-    "vector_store": {
-        "provider": "in_memory",
-    },
-    "llm": {
-        "provider": "openai",
-        "model": "gpt-4o",
-    },
-    "embedder": {
-        "provider": "custom",
-        "model": async_embedder
+# Check if we should use graph memory or fallback to simple memory
+use_graph_memory = os.getenv("USE_GRAPH_MEMORY", "true").lower() == "true"
+neo4j_password = os.getenv("NEO4J_PASSWORD", "")
+
+if use_graph_memory and neo4j_password:
+    logger.info("Using full graph memory configuration with Neo4j")
+    mem0_config = {
+        "graph_store": {
+            "provider": "neo4j",
+            "config": {
+                "url": os.getenv("NEO4J_URL", "bolt://localhost:7687"),
+                "username": os.getenv("NEO4J_USERNAME", "neo4j"),
+                "password": neo4j_password,
+                "database": os.getenv("NEO4J_DATABASE", "neo4j")
+            }
+        },
+        "llm": {
+            "provider": "openai",
+            "config": {
+                "model": "gpt-4o",
+                "api_key": openai_api_key
+            }
+        },
+        "embedder": {
+            "provider": "openai",
+            "config": {
+                "model": "text-embedding-ada-002",
+                "api_key": openai_api_key,
+                "embedding_dims": 1536
+            }
+        }
     }
-}
+else:
+    logger.warning("Graph memory disabled - using simple memory configuration")
+    logger.warning(f"USE_GRAPH_MEMORY: {use_graph_memory}, NEO4J_PASSWORD set: {bool(neo4j_password)}")
+    mem0_config = {
+        "llm": {
+            "provider": "openai",
+            "config": {
+                "model": "gpt-4o",
+                "api_key": openai_api_key
+            }
+        },
+        "embedder": {
+            "provider": "openai",
+            "config": {
+                "model": "text-embedding-ada-002",
+                "api_key": openai_api_key,
+                "embedding_dims": 1536
+            }
+        }
+    }
+
+# Initialize mem0 client with the configuration - using Memory.from_config for graph support
+mem0_client = Memory.from_config(config_dict=mem0_config)
+logger.info("Initialized Mem0 Memory client with Neo4j graph store configuration")
+logger.info(f"Neo4j URL: {os.getenv('NEO4J_URL', 'bolt://localhost:7687')}")
+logger.info(f"Neo4j Username: {os.getenv('NEO4J_USERNAME', 'neo4j')}")
+logger.info(f"Neo4j Database: {os.getenv('NEO4J_DATABASE', 'neo4j')}")
 
 # Seed initial memories for Gavin Wood
 initial_memories = [
