@@ -416,16 +416,6 @@
                         const resultsResponse = await fetch(`/analyze/content/results/${sessionId}`);
                         const resultsData = await resultsResponse.json();
                         
-                        console.log('=== CONTENT ANALYSIS DEBUG ===');
-                        console.log('Full Results Data:', resultsData);
-                        console.log('MT-Bench Available:', resultsData.mt_bench_available);
-                        console.log('MT-Bench Summary:', resultsData.mt_bench_summary);
-                        console.log('Evaluated Results:', resultsData.evaluated_results);
-                        console.log('Test Results:', resultsData.test_results);
-                        console.log('Questions:', resultsData.questions);
-                        console.log('QA Pairs:', resultsData.qa_pairs);
-                        console.log('================================');
-                        
                         contentStatus.className = 'status-indicator status-completed';
                         contentAnalysis.innerHTML = 'YES - Analysis completed successfully!';
                         

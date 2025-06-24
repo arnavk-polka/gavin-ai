@@ -345,17 +345,11 @@ class AnalyzeOrchestrator:
         evaluated_results = self.current_session.get("evaluated_results", [])
         aggregate_metrics = self.current_session.get("aggregate_metrics", {})
         
-        logger.info(f"Extracting MT-Bench analysis:")
-        logger.info(f"  Evaluated results count: {len(evaluated_results)}")
-        logger.info(f"  Aggregate metrics: {aggregate_metrics}")
-        
         # Extract individual MT-Bench evaluations
         mt_bench_evaluations = []
         for i, result in enumerate(evaluated_results):
-            logger.info(f"  Result {i}: {result.get('evaluation', {}).get('evaluation_method', 'unknown')}")
             if result.get("evaluation", {}).get("evaluation_method") == "mt_bench":
                 eval_data = result["evaluation"]
-                logger.info(f"    MT-Bench evaluation found: score={eval_data.get('overall_score', 0):.3f}")
                 mt_bench_evaluations.append({
                     "question_index": i,
                     "question": result.get("question", ""),
@@ -370,8 +364,6 @@ class AnalyzeOrchestrator:
                     "strengths": eval_data.get("reasoning", {}).get("strengths", []),
                     "weaknesses": eval_data.get("reasoning", {}).get("weaknesses", [])
                 })
-        
-        logger.info(f"  MT-Bench evaluations extracted: {len(mt_bench_evaluations)}")
         
         # Calculate dimension breakdowns
         dimension_breakdown = {}
@@ -390,7 +382,7 @@ class AnalyzeOrchestrator:
                     ]
                 }
         
-        result = {
+        return {
             "evaluation_method": "mt_bench",
             "total_evaluations": len(mt_bench_evaluations),
             "individual_evaluations": mt_bench_evaluations,
@@ -401,9 +393,6 @@ class AnalyzeOrchestrator:
             "pass_rate": aggregate_metrics.get("pass_rate", 0.0),
             "average_overall_score": aggregate_metrics.get("avg_overall_score", 0.0)
         }
-        
-        logger.info(f"  MT-Bench analysis result: {result}")
-        return result
     
     def _get_dimension_description(self, dimension: str) -> str:
         """Get human-readable description of MT-Bench dimensions."""
@@ -522,16 +511,11 @@ class AnalyzeOrchestrator:
             
             # Step 1: Parse content and generate questions
             logger.info("Step 1: Parsing content for questions...")
-            logger.info(f"Content preview: {session['content_text'][:200]}...")
             session["status"] = "parsing_content"
             session["progress"]["current_step"] = "parsing_content"
             
             qa_pairs = await self.tester_ai.parse_content_for_analysis(session["content_text"])
             session["qa_pairs"] = qa_pairs
-            
-            logger.info(f"Generated {len(qa_pairs)} QA pairs from content")
-            for i, pair in enumerate(qa_pairs):
-                logger.info(f"  QA Pair {i+1}: Q='{pair.get('question', '')[:100]}...' A='{pair.get('answer', '')[:50]}...'")
             
             if not qa_pairs:
                 session["status"] = "failed"
@@ -544,10 +528,6 @@ class AnalyzeOrchestrator:
             session["questions"] = questions
             session["progress"]["questions_total"] = len(questions)
             
-            logger.info(f"Extracted {len(questions)} questions for testing")
-            for i, question in enumerate(questions):
-                logger.info(f"  Question {i+1}: {question[:100]}...")
-            
             # Step 3: Fire questions sequentially and get bot responses
             logger.info("Step 3: Testing bot responses...")
             session["status"] = "testing_responses"
@@ -559,22 +539,14 @@ class AnalyzeOrchestrator:
             )
             session["test_results"] = test_results
             
-            logger.info(f"Got {len(test_results)} test results")
-            
             # Step 4: Evaluate responses
             logger.info("Step 4: Evaluating responses...")
             session["status"] = "evaluating_responses"
             session["progress"]["current_step"] = "evaluating_responses"
             
-            logger.info(f"JudgeAI using MT-Bench: {self.judge_ai.use_mt_bench}")
             evaluated_results = await self.judge_ai.batch_evaluate(test_results, qa_pairs)
             session["evaluated_results"] = evaluated_results
             session["progress"]["evaluations_completed"] = len(evaluated_results)
-            
-            logger.info(f"Evaluated {len(evaluated_results)} results")
-            for i, result in enumerate(evaluated_results):
-                if result.get("evaluation"):
-                    logger.info(f"  Result {i+1}: Score={result['evaluation'].get('overall_score', 0):.3f}, Method={result['evaluation'].get('evaluation_method', 'unknown')}")
             
             # Step 5: Calculate aggregate metrics
             logger.info("Step 5: Calculating metrics...")
@@ -583,8 +555,6 @@ class AnalyzeOrchestrator:
             
             aggregate_metrics = self.judge_ai.calculate_aggregate_metrics(evaluated_results)
             session["aggregate_metrics"] = aggregate_metrics
-            
-            logger.info(f"Aggregate metrics: {aggregate_metrics}")
             
             # Complete
             session["status"] = "completed"
@@ -596,8 +566,6 @@ class AnalyzeOrchestrator:
             
         except Exception as e:
             logger.error(f"Content analysis failed: {e}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
             if self.current_session:
                 self.current_session["status"] = "failed"
                 self.current_session["error"] = str(e)

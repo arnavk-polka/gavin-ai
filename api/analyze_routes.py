@@ -306,11 +306,9 @@ async def analyze_content(request: ContentAnalysisRequest):
         
         # Check if content is too long (>50 words) and needs to be broken into questions
         word_count = len(content_text.split())
-        logger.info(f"Content analysis: {word_count} words, content preview: {content_text[:100]}...")
         
         if word_count > 50:  # Lowered threshold to ensure more content gets processed
             # For long content, use content analysis method
-            logger.info(f"Starting content analysis session for {word_count} word content")
             session_result = await orchestrator.start_content_analysis(
                 content_text=content_text,
                 session_name=request.session_name or f"Content_Analysis_{int(time.time())}"
@@ -391,14 +389,6 @@ async def get_content_analysis_results(session_id: int):
         results["session_id"] = results["session_info"]["session_id"]
         results["questions"] = [pair.get("question", "") for pair in results.get("qa_pairs", [])]
         results["test_results"] = orchestrator.current_session.get("test_results", []) if orchestrator.current_session else []
-        
-        logger.info(f"Content analysis results debug:")
-        logger.info(f"  QA pairs count: {len(results.get('qa_pairs', []))}")
-        logger.info(f"  Questions count: {len(results.get('questions', []))}")
-        logger.info(f"  Test results count: {len(results.get('test_results', []))}")
-        logger.info(f"  MT-Bench analysis present: {'mt_bench_analysis' in results}")
-        if 'mt_bench_analysis' in results:
-            logger.info(f"  MT-Bench evaluations: {len(results['mt_bench_analysis'].get('individual_evaluations', []))}")
         
         # Add MT-Bench analysis if available
         if "mt_bench_analysis" in results:
