@@ -88,33 +88,41 @@ class TesterAI:
             
             # Use AI to generate questions from content
             prompt = f"""
-            Analyze this content and generate 3-5 specific technical questions about blockchain, crypto, or technology topics mentioned.
-            Focus on questions that would test deep technical knowledge about the concepts discussed.
+            Analyze this content and generate 4-6 specific technical questions about blockchain, crypto, or technology topics mentioned.
+            
+            The content could be a blog post, tweet, article, or any other format. Extract the key technical concepts and create questions that would test deep understanding.
             
             Each question should be:
             - Self-contained and clear
-            - Focused on technical details
-            - About blockchain, crypto, or technology
-            - Something Gavin Wood would have expertise on
+            - Focused on technical details and concepts
+            - About blockchain, crypto, Web3, or related technology
+            - Something that would require expert knowledge to answer well
+            - Specific enough to test understanding, not just general knowledge
+            
+            Examples of good questions:
+            - "What is the difference between optimistic and zero-knowledge rollups in terms of security guarantees?"
+            - "How does the Polkadot relay chain coordinate parachain consensus?"
+            - "What are the trade-offs between Layer 1 and Layer 2 scaling solutions?"
             
             Return ONLY a JSON array of objects with "question" and "answer" fields.
             Leave the "answer" field empty since we'll get responses from the bot.
             
-            Content:
-            {content_text[:6000]}  # Limit to avoid token limits
+            Content to analyze:
+            {content_text[:8000]}  # Increased limit for better analysis
             
             Format exactly like this:
             [
                 {{"question": "What is the technical difference between...", "answer": ""}},
-                {{"question": "How does parallel execution improve...", "answer": ""}}
+                {{"question": "How does parallel execution improve...", "answer": ""}},
+                {{"question": "What are the security implications of...", "answer": ""}}
             ]
             """
             
             response = await self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=1500
+                temperature=0.4,  # Slightly higher for more creative questions
+                max_tokens=2000
             )
             
             content_response = response.choices[0].message.content.strip()
@@ -129,6 +137,8 @@ class TesterAI:
                     qa_pairs = json.loads(json_str)
                     
                     logger.info(f"Generated {len(qa_pairs)} questions from content")
+                    for i, pair in enumerate(qa_pairs):
+                        logger.info(f"  Question {i+1}: {pair.get('question', '')[:100]}...")
                     return qa_pairs
                 else:
                     logger.error("No valid JSON array found in AI response")

@@ -416,6 +416,16 @@
                         const resultsResponse = await fetch(`/analyze/content/results/${sessionId}`);
                         const resultsData = await resultsResponse.json();
                         
+                        console.log('=== CONTENT ANALYSIS DEBUG ===');
+                        console.log('Full Results Data:', resultsData);
+                        console.log('MT-Bench Available:', resultsData.mt_bench_available);
+                        console.log('MT-Bench Summary:', resultsData.mt_bench_summary);
+                        console.log('Evaluated Results:', resultsData.evaluated_results);
+                        console.log('Test Results:', resultsData.test_results);
+                        console.log('Questions:', resultsData.questions);
+                        console.log('QA Pairs:', resultsData.qa_pairs);
+                        console.log('================================');
+                        
                         contentStatus.className = 'status-indicator status-completed';
                         contentAnalysis.innerHTML = 'YES - Analysis completed successfully!';
                         
@@ -430,13 +440,129 @@
                         
                         if (resultsData.test_results && resultsData.test_results.length > 0) {
                             let responsesHtml = '<div class="multi-responses">';
+                            
+                            // Add MT-Bench summary if available
+                            if (resultsData.mt_bench_available && resultsData.mt_bench_summary) {
+                                responsesHtml += `
+                                    <div class="response-item" style="background: #f0f8ff; border: 2px solid #2c5aa0;">
+                                        <h3 style="color: #2c5aa0; margin-bottom: 15px;">📊 MT-Bench Analysis Summary</h3>
+                                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 15px;">
+                                            <div style="background: white; padding: 10px; border-radius: 6px; text-align: center;">
+                                                <div style="font-size: 1.2em; font-weight: bold; color: #2c5aa0;">${(resultsData.mt_bench_summary.average_overall_score * 100).toFixed(1)}%</div>
+                                                <div style="font-size: 0.8em; color: #666;">Overall Score</div>
+                                            </div>
+                                            <div style="background: white; padding: 10px; border-radius: 6px; text-align: center;">
+                                                <div style="font-size: 1.2em; font-weight: bold; color: #2c5aa0;">${(resultsData.mt_bench_summary.pass_rate * 100).toFixed(1)}%</div>
+                                                <div style="font-size: 0.8em; color: #666;">Pass Rate</div>
+                                            </div>
+                                            <div style="background: white; padding: 10px; border-radius: 6px; text-align: center;">
+                                                <div style="font-size: 1.2em; font-weight: bold; color: #2c5aa0;">${resultsData.mt_bench_summary.total_evaluations}</div>
+                                                <div style="font-size: 0.8em; color: #666;">Questions</div>
+                                            </div>
+                                        </div>
+                                        <div style="margin-bottom: 15px;">
+                                            <h4 style="color: #2c5aa0; margin-bottom: 8px;">Dimension Averages:</h4>
+                                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px;">
+                                                <div style="background: white; padding: 8px; border-radius: 4px; text-align: center; font-size: 0.9em;">
+                                                    <strong>Relevance:</strong> ${(resultsData.mt_bench_summary.dimension_averages.avg_relevance * 100).toFixed(1)}%
+                                                </div>
+                                                <div style="background: white; padding: 8px; border-radius: 4px; text-align: center; font-size: 0.9em;">
+                                                    <strong>Accuracy:</strong> ${(resultsData.mt_bench_summary.dimension_averages.avg_accuracy * 100).toFixed(1)}%
+                                                </div>
+                                                <div style="background: white; padding: 8px; border-radius: 4px; text-align: center; font-size: 0.9em;">
+                                                    <strong>Clarity:</strong> ${(resultsData.mt_bench_summary.dimension_averages.avg_clarity * 100).toFixed(1)}%
+                                                </div>
+                                                <div style="background: white; padding: 8px; border-radius: 4px; text-align: center; font-size: 0.9em;">
+                                                    <strong>Depth:</strong> ${(resultsData.mt_bench_summary.dimension_averages.avg_depth * 100).toFixed(1)}%
+                                                </div>
+                                                <div style="background: white; padding: 8px; border-radius: 4px; text-align: center; font-size: 0.9em;">
+                                                    <strong>Helpful:</strong> ${(resultsData.mt_bench_summary.dimension_averages.avg_helpfulness * 100).toFixed(1)}%
+                                                </div>
+                                            </div>
+                                        </div>
+                                        ${resultsData.mt_bench_summary.common_strengths && resultsData.mt_bench_summary.common_strengths.length > 0 ? `
+                                            <div style="margin-bottom: 10px;">
+                                                <h4 style="color: #28a745; margin-bottom: 5px;">✅ Strengths:</h4>
+                                                <ul style="margin: 0; padding-left: 20px; font-size: 0.9em;">
+                                                    ${resultsData.mt_bench_summary.common_strengths.map(strength => `<li>${strength}</li>`).join('')}
+                                                </ul>
+                                            </div>
+                                        ` : ''}
+                                        ${resultsData.mt_bench_summary.common_weaknesses && resultsData.mt_bench_summary.common_weaknesses.length > 0 ? `
+                                            <div style="margin-bottom: 10px;">
+                                                <h4 style="color: #dc3545; margin-bottom: 5px;">⚠️ Areas for Improvement:</h4>
+                                                <ul style="margin: 0; padding-left: 20px; font-size: 0.9em;">
+                                                    ${resultsData.mt_bench_summary.common_weaknesses.map(weakness => `<li>${weakness}</li>`).join('')}
+                                                </ul>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                `;
+                            }
+                            
                             resultsData.test_results.forEach((item, index) => {
+                                // Check if MT-Bench evaluation data is available
+                                const evaluation = resultsData.evaluated_results && resultsData.evaluated_results[index] ? resultsData.evaluated_results[index].evaluation : null;
+                                const isMTBench = evaluation && evaluation.evaluation_method === 'mt_bench';
+                                const mtBenchScores = evaluation && evaluation.mt_bench_scores ? evaluation.mt_bench_scores : {};
+                                
                                 responsesHtml += `
                                     <div class="response-item">
                                         <h4>Question ${index + 1}:</h4>
                                         <p class="question">${item.question}</p>
                                         <h4>Response:</h4>
                                         <p class="answer">${item.bot_response}</p>
+                                        ${evaluation ? `
+                                            <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                                                <h5 style="color: #2c5aa0; margin-bottom: 10px;">Evaluation (${isMTBench ? 'MT-Bench' : 'Legacy'}):</h5>
+                                                ${isMTBench ? `
+                                                    <div style="background: #f0f8ff; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+                                                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 10px;">
+                                                            <div style="background: white; padding: 6px; border-radius: 4px; text-align: center; font-size: 0.8em;">
+                                                                <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.relevance * 100).toFixed(1)}%</div>
+                                                                <div style="font-size: 0.7em; color: #666;">Relevance</div>
+                                                            </div>
+                                                            <div style="background: white; padding: 6px; border-radius: 4px; text-align: center; font-size: 0.8em;">
+                                                                <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.accuracy * 100).toFixed(1)}%</div>
+                                                                <div style="font-size: 0.7em; color: #666;">Accuracy</div>
+                                                            </div>
+                                                            <div style="background: white; padding: 6px; border-radius: 4px; text-align: center; font-size: 0.8em;">
+                                                                <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.clarity * 100).toFixed(1)}%</div>
+                                                                <div style="font-size: 0.7em; color: #666;">Clarity</div>
+                                                            </div>
+                                                            <div style="background: white; padding: 6px; border-radius: 4px; text-align: center; font-size: 0.8em;">
+                                                                <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.depth * 100).toFixed(1)}%</div>
+                                                                <div style="font-size: 0.7em; color: #666;">Depth</div>
+                                                            </div>
+                                                            <div style="background: white; padding: 6px; border-radius: 4px; text-align: center; font-size: 0.8em;">
+                                                                <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.helpfulness * 100).toFixed(1)}%</div>
+                                                                <div style="font-size: 0.7em; color: #666;">Helpful</div>
+                                                            </div>
+                                                        </div>
+                                                        <div style="font-size: 0.9em;">
+                                                            <strong>Overall Score:</strong> ${(evaluation.overall_score * 100).toFixed(1)}% | 
+                                                            <strong>Confidence:</strong> ${(evaluation.confidence * 100).toFixed(1)}%
+                                                        </div>
+                                                        ${evaluation.reasoning && evaluation.reasoning.strengths && evaluation.reasoning.strengths.length > 0 ? `
+                                                            <div style="margin-top: 8px; font-size: 0.8em;">
+                                                                <strong style="color: #28a745;">Strengths:</strong> ${evaluation.reasoning.strengths.join(', ')}
+                                                            </div>
+                                                        ` : ''}
+                                                        ${evaluation.reasoning && evaluation.reasoning.weaknesses && evaluation.reasoning.weaknesses.length > 0 ? `
+                                                            <div style="margin-top: 4px; font-size: 0.8em;">
+                                                                <strong style="color: #dc3545;">Areas for improvement:</strong> ${evaluation.reasoning.weaknesses.join(', ')}
+                                                            </div>
+                                                        ` : ''}
+                                                    </div>
+                                                ` : `
+                                                    <div style="font-size: 0.9em;">
+                                                        <strong>Overall Score:</strong> ${(evaluation.overall_score * 100).toFixed(1)}% | 
+                                                        <strong>Content Similarity:</strong> ${(evaluation.content_similarity * 100).toFixed(1)}% | 
+                                                        <strong>Style Fidelity:</strong> ${(evaluation.style_fidelity * 100).toFixed(1)}%
+                                                    </div>
+                                                `}
+                                            </div>
+                                        ` : ''}
                                     </div>
                                 `;
                             });

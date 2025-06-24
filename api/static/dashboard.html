@@ -779,55 +779,127 @@
         function showMetrics(metrics) {
             const metricsContainer = document.getElementById('overallMetrics');
             if (currentTab === 'transcript') {
-                metricsContainer.innerHTML = `
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.avg_overall_score * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Overall Score</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.avg_content_similarity * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Content Similarity</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.avg_style_fidelity * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Style Fidelity</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.pass_rate * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Pass Rate</div>
-                    </div>
-                `;
+                // Check if MT-Bench data is available
+                if (metrics.evaluation_method === 'mt_bench' && metrics.dimension_averages) {
+                    // Show MT-Bench dimension scores
+                    metricsContainer.innerHTML = `
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_overall_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Overall Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_relevance * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Relevance</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_accuracy * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Accuracy</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_clarity * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Clarity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_depth * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Depth</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_helpfulness * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Helpfulness</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.pass_rate * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Pass Rate</div>
+                        </div>
+                    `;
+                } else {
+                    // Show legacy metrics
+                    metricsContainer.innerHTML = `
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_overall_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Overall Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_content_similarity * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Content Similarity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_style_fidelity * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Style Fidelity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.pass_rate * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Pass Rate</div>
+                        </div>
+                    `;
+                }
             } else {
-                metricsContainer.innerHTML = `
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.avg_overall_score * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Overall Score</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.avg_relevance_score * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Relevance</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.avg_consistency_score * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Consistency</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.avg_technical_score * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Technical</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.avg_clarity_score * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Clarity</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.avg_persona_score * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Persona</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">${(metrics.pass_rate * 100).toFixed(1)}%</div>
-                        <div class="metric-label">Pass Rate</div>
-                    </div>
-                `;
+                // Check if MT-Bench data is available for multi-turn
+                if (metrics.evaluation_method === 'mt_bench' && metrics.dimension_averages) {
+                    // Show MT-Bench dimension scores for multi-turn
+                    metricsContainer.innerHTML = `
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_overall_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Overall Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_relevance * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Relevance</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_accuracy * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Accuracy</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_clarity * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Clarity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_depth * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Depth</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.dimension_averages.avg_helpfulness * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Helpfulness</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.pass_rate * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Pass Rate</div>
+                        </div>
+                    `;
+                } else {
+                    // Show legacy multi-turn metrics
+                    metricsContainer.innerHTML = `
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_overall_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Overall Score</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_relevance_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Relevance</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_consistency_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Consistency</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_technical_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Technical</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_clarity_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Clarity</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.avg_persona_score * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Persona</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${(metrics.pass_rate * 100).toFixed(1)}%</div>
+                            <div class="metric-label">Pass Rate</div>
+                        </div>
+                    `;
+                }
             }
         }
 
@@ -856,6 +928,10 @@
                     const scoreClass = getScoreClass(score);
                     const scoreText = (score * 100).toFixed(1) + '%';
                     
+                    // Check if MT-Bench data is available
+                    const isMTBench = result.evaluation?.evaluation_method === 'mt_bench';
+                    const mtBenchScores = result.evaluation?.mt_bench_scores || {};
+                    
                     return `
                         <div class="result-item">
                             <div class="result-header" onclick="toggleResult(${index})">
@@ -877,22 +953,134 @@
                                 </div>
                                 ${result.evaluation ? `
                                     <div style="margin-bottom: 15px;">
-                                        <strong>Evaluation:</strong>
-                                        <p><strong>Content:</strong> ${(result.evaluation.content_similarity * 100).toFixed(1)}%</p>
-                                        <p><strong>Style:</strong> ${(result.evaluation.style_fidelity * 100).toFixed(1)}%</p>
-                                        <p><strong>Analysis:</strong> ${result.evaluation.reasoning?.content_analysis || 'N/A'}</p>
+                                        <strong>Evaluation (${isMTBench ? 'MT-Bench' : 'Legacy'}):</strong>
+                                        ${isMTBench ? `
+                                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                                                <h4 style="margin-bottom: 10px; color: #2c5aa0;">MT-Bench Dimension Scores:</h4>
+                                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 15px;">
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.relevance * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Relevance</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.accuracy * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Accuracy</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.clarity * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Clarity</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.depth * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Depth</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.helpfulness * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Helpfulness</div>
+                                                    </div>
+                                                </div>
+                                                <div style="margin-bottom: 10px;">
+                                                    <strong>Confidence:</strong> ${(result.evaluation.confidence * 100).toFixed(1)}%
+                                                </div>
+                                                ${result.evaluation.reasoning?.strengths && result.evaluation.reasoning.strengths.length > 0 ? `
+                                                    <div style="margin-bottom: 10px;">
+                                                        <strong>Strengths:</strong>
+                                                        <ul style="margin: 5px 0; padding-left: 20px;">
+                                                            ${result.evaluation.reasoning.strengths.map(strength => `<li>${strength}</li>`).join('')}
+                                                        </ul>
+                                                    </div>
+                                                ` : ''}
+                                                ${result.evaluation.reasoning?.weaknesses && result.evaluation.reasoning.weaknesses.length > 0 ? `
+                                                    <div style="margin-bottom: 10px;">
+                                                        <strong>Areas for Improvement:</strong>
+                                                        <ul style="margin: 5px 0; padding-left: 20px;">
+                                                            ${result.evaluation.reasoning.weaknesses.map(weakness => `<li>${weakness}</li>`).join('')}
+                                                        </ul>
+                                                    </div>
+                                                ` : ''}
+                                                <div>
+                                                    <strong>Detailed Analysis:</strong>
+                                                    <p style="background: white; padding: 10px; border-radius: 4px; margin: 5px 0; font-style: italic;">${result.evaluation.reasoning?.content_analysis || 'N/A'}</p>
+                                                </div>
+                                            </div>
+                                        ` : `
+                                            <p><strong>Content:</strong> ${(result.evaluation.content_similarity * 100).toFixed(1)}%</p>
+                                            <p><strong>Style:</strong> ${(result.evaluation.style_fidelity * 100).toFixed(1)}%</p>
+                                            <p><strong>Analysis:</strong> ${result.evaluation.reasoning?.content_analysis || 'N/A'}</p>
+                                        `}
                                     </div>
                                 ` : ''}
                             </div>
                         </div>
                     `;
                 }).join('');
+                
+                // Add MT-Bench summary section if available
+                if (results.mt_bench_analysis) {
+                    const mtBenchSection = document.createElement('div');
+                    mtBenchSection.className = 'card';
+                    mtBenchSection.innerHTML = `
+                        <h3 style="color: #2c5aa0; margin-bottom: 15px;">📊 MT-Bench Analysis Summary</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${(results.mt_bench_analysis.average_overall_score * 100).toFixed(1)}%</div>
+                                <div style="font-size: 0.9em; color: #666;">Average Overall Score</div>
+                            </div>
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${(results.mt_bench_analysis.pass_rate * 100).toFixed(1)}%</div>
+                                <div style="font-size: 0.9em; color: #666;">Pass Rate (≥70%)</div>
+                            </div>
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${results.mt_bench_analysis.total_evaluations}</div>
+                                <div style="font-size: 0.9em; color: #666;">Total Evaluations</div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <h4 style="color: #2c5aa0; margin-bottom: 10px;">Score Distribution:</h4>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <div style="background: #d4edda; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Excellent (≥90%):</strong> ${results.mt_bench_analysis.score_distribution.excellent || 0}
+                                </div>
+                                <div style="background: #d1ecf1; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Good (70-89%):</strong> ${results.mt_bench_analysis.score_distribution.good || 0}
+                                </div>
+                                <div style="background: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Fair (50-69%):</strong> ${results.mt_bench_analysis.score_distribution.fair || 0}
+                                </div>
+                                <div style="background: #f8d7da; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Poor (<50%):</strong> ${results.mt_bench_analysis.score_distribution.poor || 0}
+                                </div>
+                            </div>
+                        </div>
+                        ${results.mt_bench_analysis.common_strengths && results.mt_bench_analysis.common_strengths.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <h4 style="color: #28a745; margin-bottom: 8px;">✅ Common Strengths:</h4>
+                                <ul style="margin: 0; padding-left: 20px;">
+                                    ${results.mt_bench_analysis.common_strengths.map(strength => `<li>${strength}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                        ${results.mt_bench_analysis.common_weaknesses && results.mt_bench_analysis.common_weaknesses.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <h4 style="color: #dc3545; margin-bottom: 8px;">⚠️ Areas for Improvement:</h4>
+                                <ul style="margin: 0; padding-left: 20px;">
+                                    ${results.mt_bench_analysis.common_weaknesses.map(weakness => `<li>${weakness}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    `;
+                    container.appendChild(mtBenchSection);
+                }
             } else {
                 const responses = results.responses || [];
                 container.innerHTML = responses.map((response, index) => {
                     const score = response.evaluation?.overall_score || 0;
                     const scoreClass = getScoreClass(score);
                     const scoreText = (score * 100).toFixed(1) + '%';
+                    
+                    // Check if MT-Bench data is available for multi-turn
+                    const isMTBench = response.evaluation?.evaluation_method === 'mt_bench';
+                    const mtBenchScores = response.evaluation?.mt_bench_scores || {};
                     
                     return `
                         <div class="result-item">
@@ -911,19 +1099,111 @@
                                 </div>
                                 ${response.evaluation ? `
                                     <div style="margin-bottom: 15px;">
-                                        <strong>Evaluation:</strong>
-                                        <p><strong>Relevance:</strong> ${(response.evaluation.relevance_score * 100).toFixed(1)}%</p>
-                                        <p><strong>Consistency:</strong> ${(response.evaluation.consistency_score * 100).toFixed(1)}%</p>
-                                        <p><strong>Technical:</strong> ${(response.evaluation.technical_score * 100).toFixed(1)}%</p>
-                                        <p><strong>Clarity:</strong> ${(response.evaluation.clarity_score * 100).toFixed(1)}%</p>
-                                        <p><strong>Persona:</strong> ${(response.evaluation.persona_score * 100).toFixed(1)}%</p>
-                                        <p><strong>Analysis:</strong> ${response.evaluation.reasoning || 'N/A'}</p>
+                                        <strong>Evaluation (${isMTBench ? 'MT-Bench' : 'Legacy'}):</strong>
+                                        ${isMTBench ? `
+                                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                                                <h4 style="margin-bottom: 10px; color: #2c5aa0;">MT-Bench Dimension Scores:</h4>
+                                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 15px;">
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.relevance * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Relevance</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.accuracy * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Accuracy</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.clarity * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Clarity</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.depth * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Depth</div>
+                                                    </div>
+                                                    <div style="background: white; padding: 8px; border-radius: 4px; text-align: center;">
+                                                        <div style="font-weight: bold; color: #2c5aa0;">${(mtBenchScores.helpfulness * 100).toFixed(1)}%</div>
+                                                        <div style="font-size: 0.8em; color: #666;">Helpfulness</div>
+                                                    </div>
+                                                </div>
+                                                <div style="margin-bottom: 10px;">
+                                                    <strong>Confidence:</strong> ${(response.evaluation.confidence * 100).toFixed(1)}%
+                                                </div>
+                                                <div>
+                                                    <strong>Detailed Analysis:</strong>
+                                                    <p style="background: white; padding: 10px; border-radius: 4px; margin: 5px 0; font-style: italic;">${response.evaluation.reasoning || 'N/A'}</p>
+                                                </div>
+                                            </div>
+                                        ` : `
+                                            <p><strong>Relevance:</strong> ${(response.evaluation.relevance_score * 100).toFixed(1)}%</p>
+                                            <p><strong>Consistency:</strong> ${(response.evaluation.consistency_score * 100).toFixed(1)}%</p>
+                                            <p><strong>Technical:</strong> ${(response.evaluation.technical_score * 100).toFixed(1)}%</p>
+                                            <p><strong>Clarity:</strong> ${(response.evaluation.clarity_score * 100).toFixed(1)}%</p>
+                                            <p><strong>Persona:</strong> ${(response.evaluation.persona_score * 100).toFixed(1)}%</p>
+                                            <p><strong>Analysis:</strong> ${response.evaluation.reasoning || 'N/A'}</p>
+                                        `}
                                     </div>
                                 ` : ''}
                             </div>
                         </div>
                     `;
                 }).join('');
+                
+                // Add MT-Bench summary section for multi-turn if available
+                if (results.mt_bench_analysis) {
+                    const mtBenchSection = document.createElement('div');
+                    mtBenchSection.className = 'card';
+                    mtBenchSection.innerHTML = `
+                        <h3 style="color: #2c5aa0; margin-bottom: 15px;">📊 MT-Bench Multi-Turn Analysis Summary</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${(results.mt_bench_analysis.average_overall_score * 100).toFixed(1)}%</div>
+                                <div style="font-size: 0.9em; color: #666;">Average Overall Score</div>
+                            </div>
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${(results.mt_bench_analysis.pass_rate * 100).toFixed(1)}%</div>
+                                <div style="font-size: 0.9em; color: #666;">Pass Rate (≥70%)</div>
+                            </div>
+                            <div style="background: #f0f8ff; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 1.5em; font-weight: bold; color: #2c5aa0;">${results.mt_bench_analysis.total_evaluations}</div>
+                                <div style="font-size: 0.9em; color: #666;">Total Responses</div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <h4 style="color: #2c5aa0; margin-bottom: 10px;">Score Distribution:</h4>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <div style="background: #d4edda; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Excellent (≥90%):</strong> ${results.mt_bench_analysis.score_distribution.excellent || 0}
+                                </div>
+                                <div style="background: #d1ecf1; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Good (70-89%):</strong> ${results.mt_bench_analysis.score_distribution.good || 0}
+                                </div>
+                                <div style="background: #fff3cd; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Fair (50-69%):</strong> ${results.mt_bench_analysis.score_distribution.fair || 0}
+                                </div>
+                                <div style="background: #f8d7da; padding: 8px 12px; border-radius: 4px; font-size: 0.9em;">
+                                    <strong>Poor (<50%):</strong> ${results.mt_bench_analysis.score_distribution.poor || 0}
+                                </div>
+                            </div>
+                        </div>
+                        ${results.mt_bench_analysis.common_strengths && results.mt_bench_analysis.common_strengths.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <h4 style="color: #28a745; margin-bottom: 8px;">✅ Common Strengths:</h4>
+                                <ul style="margin: 0; padding-left: 20px;">
+                                    ${results.mt_bench_analysis.common_strengths.map(strength => `<li>${strength}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                        ${results.mt_bench_analysis.common_weaknesses && results.mt_bench_analysis.common_weaknesses.length > 0 ? `
+                            <div style="margin-bottom: 15px;">
+                                <h4 style="color: #dc3545; margin-bottom: 8px;">⚠️ Areas for Improvement:</h4>
+                                <ul style="margin: 0; padding-left: 20px;">
+                                    ${results.mt_bench_analysis.common_weaknesses.map(weakness => `<li>${weakness}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    `;
+                    container.appendChild(mtBenchSection);
+                }
             }
         }
 

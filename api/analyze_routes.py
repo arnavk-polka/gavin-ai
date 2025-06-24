@@ -33,7 +33,8 @@ def get_orchestrator():
         # We need to create a gavin bot handler that matches the existing chat interface
         orchestrator = AnalyzeOrchestrator(
             openai_client=openai_client,
-            gavin_bot_handler=create_gavin_bot_handler()
+            gavin_bot_handler=create_gavin_bot_handler(),
+            use_mt_bench=True  # Enable MT-Bench evaluation
         )
     return orchestrator
 
@@ -171,6 +172,44 @@ async def get_analyze_results():
         if not results:
             raise HTTPException(status_code=404, detail="No completed analyze results available")
         
+        # Add MT-Bench analysis if available
+        if "mt_bench_analysis" in results:
+            results["mt_bench_available"] = True
+            results["mt_bench_summary"] = {
+                "average_overall_score": results["mt_bench_analysis"]["average_overall_score"],
+                "pass_rate": results["mt_bench_analysis"]["pass_rate"],
+                "total_evaluations": results["mt_bench_analysis"]["total_evaluations"],
+                "dimension_averages": {
+                    "avg_relevance": results["mt_bench_analysis"].get("dimension_breakdown", {}).get("relevance", {}).get("average_score", 0.0),
+                    "avg_accuracy": results["mt_bench_analysis"].get("dimension_breakdown", {}).get("accuracy", {}).get("average_score", 0.0),
+                    "avg_clarity": results["mt_bench_analysis"].get("dimension_breakdown", {}).get("clarity", {}).get("average_score", 0.0),
+                    "avg_depth": results["mt_bench_analysis"].get("dimension_breakdown", {}).get("depth", {}).get("average_score", 0.0),
+                    "avg_helpfulness": results["mt_bench_analysis"].get("dimension_breakdown", {}).get("helpfulness", {}).get("average_score", 0.0)
+                },
+                "score_distribution": results["mt_bench_analysis"]["score_distribution"],
+                "common_strengths": results["mt_bench_analysis"]["common_strengths"],
+                "common_weaknesses": results["mt_bench_analysis"]["common_weaknesses"]
+            }
+            
+            # Add individual evaluations for frontend access
+            if "individual_evaluations" in results["mt_bench_analysis"]:
+                results["evaluated_results"] = []
+                for eval_data in results["mt_bench_analysis"]["individual_evaluations"]:
+                    results["evaluated_results"].append({
+                        "question": eval_data.get("question", ""),
+                        "bot_response": eval_data.get("bot_response", ""),
+                        "expected_answer": eval_data.get("expected_answer", ""),
+                        "evaluation": {
+                            "overall_score": eval_data.get("overall_score", 0.0),
+                            "mt_bench_scores": eval_data.get("dimension_scores", {}),
+                            "confidence": eval_data.get("confidence", 0.0),
+                            "reasoning": eval_data.get("reasoning", {}),
+                            "evaluation_method": "mt_bench"
+                        }
+                    })
+        else:
+            results["mt_bench_available"] = False
+        
         return results
         
     except HTTPException:
@@ -265,11 +304,13 @@ async def analyze_content(request: ContentAnalysisRequest):
         # Get orchestrator instance
         orchestrator = get_orchestrator()
         
-        # Check if content is too long (>100 words) and needs to be broken into questions
+        # Check if content is too long (>50 words) and needs to be broken into questions
         word_count = len(content_text.split())
+        logger.info(f"Content analysis: {word_count} words, content preview: {content_text[:100]}...")
         
-        if word_count > 100:
+        if word_count > 50:  # Lowered threshold to ensure more content gets processed
             # For long content, use content analysis method
+            logger.info(f"Starting content analysis session for {word_count} word content")
             session_result = await orchestrator.start_content_analysis(
                 content_text=content_text,
                 session_name=request.session_name or f"Content_Analysis_{int(time.time())}"
@@ -278,7 +319,6 @@ async def analyze_content(request: ContentAnalysisRequest):
             return {
                 "is_promptable": True,
                 "analysis": "YES - Processing as multiple questions",
-                "question": content_text,
                 "session_id": session_result["session_id"],
                 "is_multi_question": True,
                 "processing": True
@@ -351,6 +391,52 @@ async def get_content_analysis_results(session_id: int):
         results["session_id"] = results["session_info"]["session_id"]
         results["questions"] = [pair.get("question", "") for pair in results.get("qa_pairs", [])]
         results["test_results"] = orchestrator.current_session.get("test_results", []) if orchestrator.current_session else []
+        
+        logger.info(f"Content analysis results debug:")
+        logger.info(f"  QA pairs count: {len(results.get('qa_pairs', []))}")
+        logger.info(f"  Questions count: {len(results.get('questions', []))}")
+        logger.info(f"  Test results count: {len(results.get('test_results', []))}")
+        logger.info(f"  MT-Bench analysis present: {'mt_bench_analysis' in results}")
+        if 'mt_bench_analysis' in results:
+            logger.info(f"  MT-Bench evaluations: {len(results['mt_bench_analysis'].get('individual_evaluations', []))}")
+        
+        # Add MT-Bench analysis if available
+        if "mt_bench_analysis" in results:
+            results["mt_bench_available"] = True
+            results["mt_bench_summary"] = {
+                "average_overall_score": results["mt_bench_analysis"]["average_overall_score"],
+                "pass_rate": results["mt_bench_analysis"]["pass_rate"],
+                "total_evaluations": results["mt_bench_analysis"]["total_evaluations"],
+                "dimension_averages": {
+                    "avg_relevance": results["mt_bench_analysis"].get("dimension_breakdown", {}).get("relevance", {}).get("average_score", 0.0),
+                    "avg_accuracy": results["mt_bench_analysis"].get("dimension_breakdown", {}).get("accuracy", {}).get("average_score", 0.0),
+                    "avg_clarity": results["mt_bench_analysis"].get("dimension_breakdown", {}).get("clarity", {}).get("average_score", 0.0),
+                    "avg_depth": results["mt_bench_analysis"].get("dimension_breakdown", {}).get("depth", {}).get("average_score", 0.0),
+                    "avg_helpfulness": results["mt_bench_analysis"].get("dimension_breakdown", {}).get("helpfulness", {}).get("average_score", 0.0)
+                },
+                "score_distribution": results["mt_bench_analysis"]["score_distribution"],
+                "common_strengths": results["mt_bench_analysis"]["common_strengths"],
+                "common_weaknesses": results["mt_bench_analysis"]["common_weaknesses"]
+            }
+            
+            # Add individual evaluations for frontend access
+            if "individual_evaluations" in results["mt_bench_analysis"]:
+                results["evaluated_results"] = []
+                for eval_data in results["mt_bench_analysis"]["individual_evaluations"]:
+                    results["evaluated_results"].append({
+                        "question": eval_data.get("question", ""),
+                        "bot_response": eval_data.get("bot_response", ""),
+                        "expected_answer": eval_data.get("expected_answer", ""),
+                        "evaluation": {
+                            "overall_score": eval_data.get("overall_score", 0.0),
+                            "mt_bench_scores": eval_data.get("dimension_scores", {}),
+                            "confidence": eval_data.get("confidence", 0.0),
+                            "reasoning": eval_data.get("reasoning", {}),
+                            "evaluation_method": "mt_bench"
+                        }
+                    })
+        else:
+            results["mt_bench_available"] = False
         
         return results
         
