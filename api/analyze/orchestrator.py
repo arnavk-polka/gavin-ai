@@ -382,7 +382,7 @@ class AnalyzeOrchestrator:
                     ]
                 }
         
-        return {
+        result = {
             "evaluation_method": "mt_bench",
             "total_evaluations": len(mt_bench_evaluations),
             "individual_evaluations": mt_bench_evaluations,
@@ -393,6 +393,9 @@ class AnalyzeOrchestrator:
             "pass_rate": aggregate_metrics.get("pass_rate", 0.0),
             "average_overall_score": aggregate_metrics.get("avg_overall_score", 0.0)
         }
+        
+        logger.info(f"  MT-Bench analysis result: {result}")
+        return result
     
     def _get_dimension_description(self, dimension: str) -> str:
         """Get human-readable description of MT-Bench dimensions."""
