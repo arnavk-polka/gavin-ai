@@ -543,6 +543,7 @@
         let conversationMessages = [];
         let chatMessages = [];
         let isTestMode = false;
+        let testCompleted = false;
 
         // File upload handling
         const fileInput = document.getElementById('fileInput');
@@ -653,12 +654,13 @@
                 clearInterval(statusCheckInterval);
             }
             
+            testCompleted = false; // Reset completion flag
             statusCheckInterval = setInterval(checkStatus, 2000);
             checkStatus(); // Initial check
         }
 
         async function checkStatus() {
-            if (!currentSessionId) return;
+            if (!currentSessionId || testCompleted) return;
 
             try {
                 const endpoint = currentTab === 'transcript' ? '/analyze/status' : '/analyze/multi-turn/status';
@@ -668,12 +670,16 @@
                 if (status) {
                     updateProgressDisplay(status);
                     
-                    if (status.status === 'completed') {
+                    if (status.status === 'completed' && !testCompleted) {
+                        testCompleted = true;
                         clearInterval(statusCheckInterval);
+                        statusCheckInterval = null;
                         await loadDetailedResults();
                         showAlert('Test completed successfully!', 'success');
-                    } else if (status.status === 'failed') {
+                    } else if (status.status === 'failed' && !testCompleted) {
+                        testCompleted = true;
                         clearInterval(statusCheckInterval);
+                        statusCheckInterval = null;
                         showAlert('Test failed: ' + (status.error || 'Unknown error'), 'danger');
                     }
                 }

@@ -31,11 +31,11 @@ class BLEURTScorer:
                 import evaluate
                 
                 logger.info("Initializing BLEURT scorer...")
-                logger.info("About to call evaluate.load('bleurt', 'bleurt-tiny-128')...")
+                logger.info("About to call evaluate.load('bleurt', 'bleurt-base-128')...")
                 
-                # Load BLEURT via HuggingFace evaluate (using smallest model)
-                # bleurt-tiny-128 is much smaller than others (~100MB vs 405MB+ for base)
-                self.scorer = evaluate.load("bleurt", "bleurt-tiny-128")
+                # Load BLEURT via HuggingFace evaluate (using smaller model)
+                # bleurt-base-128 is much smaller than bleurt-20 (500MB vs 2.14GB)
+                self.scorer = evaluate.load("bleurt", "bleurt-base-128")
                 logger.info("BLEURT model loaded successfully")
                 
             self._model_loaded = True
@@ -51,8 +51,21 @@ class BLEURTScorer:
             import traceback
             logger.error(f"BLEURT loading traceback: {traceback.format_exc()}")
             
-            # Since model should be pre-downloaded, this is a serious error
-            raise RuntimeError(f"BLEURT model failed to load. Model should be pre-downloaded during Docker build. Error: {e}")
+            # Fallback to sentence transformer similarity
+            logger.warning("BLEURT failed, falling back to SentenceTransformer semantic similarity...")
+            try:
+                from sentence_transformers import SentenceTransformer
+                from sklearn.metrics.pairwise import cosine_similarity
+                import numpy as np
+                
+                self.scorer = SentenceTransformer('all-MiniLM-L6-v2')  # Small, fast model
+                self._use_sentence_transformer = True
+                self._model_loaded = True
+                logger.info("Fallback to SentenceTransformer successful")
+                return
+            except Exception as fallback_e:
+                logger.error(f"Fallback to SentenceTransformer also failed: {fallback_e}")
+                raise RuntimeError(f"Both BLEURT and SentenceTransformer fallback failed: {e}")
     
     def compute_score(self, reference: str, candidate: str) -> float:
         """
@@ -69,42 +82,26 @@ class BLEURTScorer:
             self._load_model()
             
         try:
-            if self._use_sentence_transformer:
-                logger.debug("Computing SentenceTransformer similarity...")
-                
-                # Use SentenceTransformer cosine similarity
-                ref_embedding = self.scorer.encode([reference])
-                cand_embedding = self.scorer.encode([candidate])
-                
-                from sklearn.metrics.pairwise import cosine_similarity
-                similarity = cosine_similarity(ref_embedding, cand_embedding)[0][0]
-                
-                # Cosine similarity is already 0-1 range
-                score = max(0.0, min(1.0, similarity))
-                
-                logger.debug(f"SentenceTransformer similarity: {score:.3f}")
-                return score
-            else:
-                logger.debug("Computing BLEURT score...")
-                
-                # Compute raw BLEURT score using HuggingFace evaluate
-                result = self.scorer.compute(
-                    predictions=[candidate],
-                    references=[reference]
-                )
-                raw_score = result['scores'][0]
-                
-                # Normalize score to 0-1 range
-                # BLEURT scores typically range from about -2 to +2
-                # We'll map this to 0-1 using a sigmoid-like transformation
-                normalized_score = self._normalize_score(raw_score)
-                
-                logger.debug(f"BLEURT raw score: {raw_score:.3f}, normalized: {normalized_score:.3f}")
-                
-                return normalized_score
+            logger.debug("Computing BLEURT score...")
+            
+            # Compute raw BLEURT score using HuggingFace evaluate
+            result = self.scorer.compute(
+                predictions=[candidate],
+                references=[reference]
+            )
+            raw_score = result['scores'][0]
+            
+            # Normalize score to 0-1 range
+            # BLEURT scores typically range from about -2 to +2
+            # We'll map this to 0-1 using a sigmoid-like transformation
+            normalized_score = self._normalize_score(raw_score)
+            
+            logger.debug(f"BLEURT raw score: {raw_score:.3f}, normalized: {normalized_score:.3f}")
+            
+            return normalized_score
             
         except Exception as e:
-            logger.error(f"Error computing similarity score: {e}")
+            logger.error(f"Error computing BLEURT score: {e}")
             # Return a default low score if computation fails
             return 0.1
     
