@@ -13,7 +13,10 @@ class AnalyzeOrchestrator:
         self.openai_client = openai_client
         self.gavin_bot_handler = gavin_bot_handler
         self.tester_ai = TesterAI(openai_client)
-        self.judge_ai = JudgeAI(openai_client, use_mt_bench=use_mt_bench)
+        # Initialize JudgeAI with BLEURT enabled and MT-Bench disabled for transcript tests
+        self.judge_ai_transcript = JudgeAI(openai_client, use_mt_bench=False, use_bleurt=True)
+        # Initialize separate JudgeAI with MT-Bench for multi-turn tests
+        self.judge_ai_multiturn = JudgeAI(openai_client, use_mt_bench=use_mt_bench, use_bleurt=False)
         
         # Test session state
         self.current_session = None
@@ -21,12 +24,10 @@ class AnalyzeOrchestrator:
         self.session_id = 0
         
         logger.info(f"=== AnalyzeOrchestrator Initialized ===")
-        logger.info(f"Using MT-Bench evaluation: {use_mt_bench}")
-        logger.info(f"JudgeAI configuration: use_mt_bench={self.judge_ai.use_mt_bench}")
-        if use_mt_bench:
-            logger.info("MT-Bench evaluation will be used for all assessments")
-        else:
-            logger.info("Legacy evaluation will be used for all assessments")
+        logger.info(f"Transcript tests: BLEURT-only evaluation")
+        logger.info(f"Multi-turn tests: MT-Bench evaluation (use_mt_bench={use_mt_bench})")
+        logger.info(f"Transcript JudgeAI: BLEURT-only (no GPT-4 evaluation)")
+        logger.info(f"Multi-turn JudgeAI: MT-Bench only (no BLEURT)")
     
     async def start_stress_test(self, transcript_text: str, session_name: str = None) -> Dict:
         """
@@ -57,6 +58,10 @@ class AnalyzeOrchestrator:
                 "evaluations_completed": 0
             }
         }
+        
+        # Initialize BLEURT model for transcript test (will be loaded lazily during evaluation)
+        if self.judge_ai_transcript.use_bleurt and self.judge_ai_transcript.bleurt_scorer:
+            logger.info("BLEURT model will load when transcript test starts (BLEURT-only evaluation)")
         
         # Start async processing
         asyncio.create_task(self._run_stress_test_async())
@@ -150,12 +155,13 @@ class AnalyzeOrchestrator:
             session["status"] = "evaluating_responses"
             session["progress"]["current_step"] = "evaluating_responses"
             
-            logger.info(f"=== Starting Response Evaluation ===")
+            logger.info(f"=== Starting Response Evaluation (Transcript Test) ===")
             logger.info(f"Test results count: {len(test_results)}")
             logger.info(f"QA pairs count: {len(qa_pairs)}")
-            logger.info(f"JudgeAI using MT-Bench: {self.judge_ai.use_mt_bench}")
+            logger.info(f"Using BLEURT-only evaluation for transcript test")
+            logger.info(f"No GPT-4 evaluation - pure BLEURT semantic similarity scoring")
             
-            evaluated_results = await self.judge_ai.batch_evaluate(test_results, qa_pairs)
+            evaluated_results = await self.judge_ai_transcript.batch_evaluate(test_results, qa_pairs)
             session["evaluated_results"] = evaluated_results
             session["progress"]["evaluations_completed"] = len(evaluated_results)
             
@@ -188,21 +194,15 @@ class AnalyzeOrchestrator:
             session["status"] = "calculating_metrics"
             session["progress"]["current_step"] = "calculating_metrics"
             
-            aggregate_metrics = self.judge_ai.calculate_aggregate_metrics(evaluated_results)
+            aggregate_metrics = self.judge_ai_transcript.calculate_aggregate_metrics(evaluated_results)
             session["aggregate_metrics"] = aggregate_metrics
             
-            logger.info(f"=== Final Aggregate Metrics ===")
+            logger.info(f"=== Final Aggregate Metrics (BLEURT-Only) ===")
             logger.info(f"Evaluation method: {aggregate_metrics.get('evaluation_method', 'unknown')}")
-            logger.info(f"Total evaluations: {aggregate_metrics.get('total_evaluations', 0)}")
-            logger.info(f"Average overall score: {aggregate_metrics.get('avg_overall_score', 0):.3f}")
-            logger.info(f"Pass rate: {aggregate_metrics.get('pass_rate', 0):.3f}")
-            
-            if aggregate_metrics.get('evaluation_method') == 'mt_bench':
-                logger.info(f"MT-Bench Dimension Averages:")
-                for key, value in aggregate_metrics.get('dimension_averages', {}).items():
-                    logger.info(f"  {key}: {value:.3f}")
-                logger.info(f"Common strengths: {aggregate_metrics.get('common_strengths', [])}")
-                logger.info(f"Common weaknesses: {aggregate_metrics.get('common_weaknesses', [])}")
+            logger.info(f"Total evaluations: {aggregate_metrics.get('successful_responses', 0)}")
+            logger.info(f"Average BLEURT score: {aggregate_metrics.get('avg_bleurt_score', 0):.3f}")
+            logger.info(f"BLEURT pass rate: {aggregate_metrics.get('pass_rate', 0):.3f}")
+            logger.info(f"Score range: {aggregate_metrics.get('min_bleurt_score', 0):.3f} - {aggregate_metrics.get('max_bleurt_score', 0):.3f}")
             
             # Complete
             session["status"] = "completed"
@@ -292,7 +292,7 @@ class AnalyzeOrchestrator:
             "status": self.current_session["status"],
             "progress": self.current_session["progress"].copy(),
             "start_time": self.current_session["start_time"],
-            "evaluation_method": "mt_bench" if self.judge_ai.use_mt_bench else "legacy"
+            "evaluation_method": "bleurt_only"
         }
         
         if "end_time" in self.current_session:
@@ -302,14 +302,13 @@ class AnalyzeOrchestrator:
         if "aggregate_metrics" in self.current_session:
             status["aggregate_metrics"] = self.current_session["aggregate_metrics"]
             
-            # Add MT-Bench specific status info
-            if self.judge_ai.use_mt_bench and status["aggregate_metrics"].get("evaluation_method") == "mt_bench":
-                status["mt_bench_summary"] = {
-                    "average_overall_score": status["aggregate_metrics"].get("avg_overall_score", 0.0),
+            # Add BLEURT summary for BLEURT-only transcript tests
+            if status["aggregate_metrics"].get("evaluation_method") == "bleurt_only":
+                status["bleurt_summary"] = {
+                    "avg_bleurt_score": status["aggregate_metrics"].get("avg_bleurt_score", 0.0),
                     "pass_rate": status["aggregate_metrics"].get("pass_rate", 0.0),
-                    "total_evaluations": status["aggregate_metrics"].get("total_evaluations", 0),
-                    "dimension_averages": status["aggregate_metrics"].get("dimension_averages", {}),
-                    "score_distribution": status["aggregate_metrics"].get("score_distribution", {})
+                    "total_evaluations": status["aggregate_metrics"].get("successful_responses", 0),
+                    "score_range": f"{status['aggregate_metrics'].get('min_bleurt_score', 0):.2f} - {status['aggregate_metrics'].get('max_bleurt_score', 0):.2f}"
                 }
         
         if "error" in self.current_session:
@@ -332,9 +331,7 @@ class AnalyzeOrchestrator:
             "aggregate_metrics": self.current_session.get("aggregate_metrics", {})
         }
         
-        # Add detailed MT-Bench analysis if available
-        if self.judge_ai.use_mt_bench and results["aggregate_metrics"].get("evaluation_method") == "mt_bench":
-            results["mt_bench_analysis"] = self._extract_mt_bench_analysis()
+        # No MT-Bench analysis for transcript tests (using legacy + BLEURT only)
         
         return results
     
@@ -417,6 +414,7 @@ class AnalyzeOrchestrator:
         session_name = session_name or f"MultiTurn_{self.session_id}_{int(time.time())}"
         
         logger.info(f"Starting multi-turn test session: {session_name}")
+        logger.info("Multi-turn test uses MT-Bench evaluation only (BLEURT is for transcript tests)")
         
         # Initialize session state
         self.current_multi_turn_session = {
@@ -458,8 +456,8 @@ class AnalyzeOrchestrator:
                     # Get bot response
                     bot_response = await self._get_gavin_bot_response(message["content"])
                     
-                    # Evaluate response
-                    evaluation = await self.judge_ai.evaluate_multi_turn_response(
+                    # Evaluate response using MT-Bench for multi-turn
+                    evaluation = await self.judge_ai_multiturn.evaluate_multi_turn_response(
                         user_message=message["content"],
                         bot_response=bot_response,
                         conversation_history=session["messages"][:i]
@@ -475,8 +473,8 @@ class AnalyzeOrchestrator:
                     # Update progress
                     session["progress"]["processed_messages"] = i + 1
             
-            # Calculate aggregate metrics
-            session["aggregate_metrics"] = self.judge_ai.calculate_multi_turn_metrics(session["responses"])
+            # Calculate aggregate metrics using MT-Bench
+            session["aggregate_metrics"] = self.judge_ai_multiturn.calculate_multi_turn_metrics(session["responses"])
             
             # Complete
             session["status"] = "completed"
