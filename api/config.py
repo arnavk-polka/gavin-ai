@@ -4,11 +4,14 @@ import asyncio
 from sentence_transformers import SentenceTransformer
 from openai import AsyncOpenAI
 from mem0 import Memory
-from utils import add_memory
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import threading
+from typing import List, Dict, Any, Optional, Tuple, Union
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -92,12 +95,12 @@ if not openai_api_key:
 openai_client = AsyncOpenAI(api_key=openai_api_key)
 
 # Initialize Mem0 with proper configuration
-mem0_api_key = os.getenv("MEM0_API_KEY", None)
-if not mem0_api_key:
-    logger.error("MEM0_API_KEY environment variable not set.")
-    raise ValueError("MEM0_API_KEY environment variable not set.")
-
-
+# MEM0_API_KEY is optional for self-hosted version
+mem0_api_key = os.getenv("MEM0_API_KEY", "")
+if mem0_api_key:
+    logger.info("Using MEM0_API_KEY for hosted version")
+else:
+    logger.info("No MEM0_API_KEY - using self-hosted mem0 configuration")
 
 # Initialize SERPER API key (optional - only needed for web search)
 serper_api_key = os.getenv("SERPER_API_KEY", None)
@@ -119,66 +122,76 @@ class AsyncEmbedder:
 
 async_embedder = AsyncEmbedder()
 
-# Configure Mem0 with async-aware embedder  
-# Check if we should use graph memory or fallback to simple memory
-use_graph_memory = os.getenv("USE_GRAPH_MEMORY", "true").lower() == "true"
-neo4j_password = os.getenv("NEO4J_PASSWORD", "")
+# Configure Mem0 with simple memory configuration only (graph implementation commented out)
+# GRAPH CONFIGURATION COMMENTED OUT
+# use_graph_memory = os.getenv("USE_GRAPH_MEMORY", "true").lower() == "true"
+# neo4j_password = os.getenv("NEO4J_PASSWORD", "")
 
-if use_graph_memory and neo4j_password:
-    logger.info("Using full graph memory configuration with Neo4j")
-    mem0_config = {
-        "graph_store": {
-            "provider": "neo4j",
-            "config": {
-                "url": os.getenv("NEO4J_URL", "bolt://localhost:7687"),
-                "username": os.getenv("NEO4J_USERNAME", "neo4j"),
-                "password": neo4j_password,
-                "database": os.getenv("NEO4J_DATABASE", "neo4j")
-            }
-        },
-        "llm": {
-            "provider": "openai",
-            "config": {
-                "model": "gpt-4o",
-                "api_key": openai_api_key
-            }
-        },
-        "embedder": {
-            "provider": "openai",
-            "config": {
-                "model": "text-embedding-ada-002",
-                "api_key": openai_api_key,
-                "embedding_dims": 1536
+# if use_graph_memory and neo4j_password:
+#     logger.info("Using full graph memory configuration with Neo4j")
+#     mem0_config = {
+#         "graph_store": {
+#             "provider": "neo4j",
+#             "config": {
+#                 "url": os.getenv("NEO4J_URL", "bolt://localhost:7687"),
+#                 "username": os.getenv("NEO4J_USERNAME", "neo4j"),
+#                 "password": neo4j_password,
+#                 "database": os.getenv("NEO4J_DATABASE", "neo4j")
+#             }
+#         },
+#         "llm": {
+#             "provider": "openai",
+#             "config": {
+#                 "model": "gpt-4o",
+#                 "api_key": openai_api_key
+#             }
+#         },
+#         "embedder": {
+#             "provider": "openai",
+#             "config": {
+#                 "model": "text-embedding-ada-002",
+#                 "api_key": openai_api_key,
+#                 "embedding_dims": 1536
+#             }
+#         }
+#     }
+# else:
+
+logger.info("Using simple memory configuration - graph implementation disabled")
+
+# Try basic mem0 initialization first
+try:
+    if mem0_api_key:
+        # Use hosted version if API key provided
+        from mem0 import MemoryClient
+        mem0_client = MemoryClient(api_key=mem0_api_key)
+        logger.info("Initialized Mem0 with hosted API")
+    else:
+        # Use self-hosted version
+        mem0_config = {
+            "llm": {
+                "provider": "openai",
+                "config": {
+                    "model": "gpt-4o",
+                    "api_key": openai_api_key
+                }
             }
         }
-    }
-else:
-    logger.warning("Graph memory disabled - using simple memory configuration")
-    logger.warning(f"USE_GRAPH_MEMORY: {use_graph_memory}, NEO4J_PASSWORD set: {bool(neo4j_password)}")
-    mem0_config = {
-        "llm": {
-            "provider": "openai",
-            "config": {
-                "model": "gpt-4o",
-                "api_key": openai_api_key
-            }
-        },
-        "embedder": {
-            "provider": "openai",
-            "config": {
-                "model": "text-embedding-ada-002",
-                "api_key": openai_api_key,
-                "embedding_dims": 1536
-            }
-        }
-    }
-
-# Initialize mem0 client with the configuration - using Memory.from_config for graph support
-mem0_client = Memory.from_config(config_dict=mem0_config)
-logger.info("Initialized Mem0 Memory client with Neo4j graph store configuration")
-logger.info(f"Neo4j URL: {os.getenv('NEO4J_URL', 'bolt://localhost:7687')}")
-logger.info(f"Neo4j Username: {os.getenv('NEO4J_USERNAME', 'neo4j')}")
-logger.info(f"Neo4j Database: {os.getenv('NEO4J_DATABASE', 'neo4j')}")
+        mem0_client = Memory.from_config(config_dict=mem0_config)
+        logger.info("Initialized Mem0 with self-hosted configuration")
+except Exception as e:
+    logger.error(f"Error initializing mem0: {e}")
+    # Fallback to basic Memory initialization
+    try:
+        mem0_client = Memory()
+        logger.info("Initialized Mem0 with default configuration")
+    except Exception as e2:
+        logger.error(f"Failed to initialize mem0 with any configuration: {e2}")
+        raise e2
+# GRAPH CONFIGURATION COMMENTED OUT
+# logger.info(f"Neo4j URL: {os.getenv('NEO4J_URL', 'bolt://localhost:7687')}")
+# logger.info(f"Neo4j Username: {os.getenv('NEO4J_USERNAME', 'neo4j')}")
+# logger.info(f"Neo4j Database: {os.getenv('NEO4J_DATABASE', 'neo4j')}")
 
 # Seed initial memories for Gavin Wood
 initial_memories = [
@@ -192,11 +205,27 @@ async def seed_memories():
     try:
         # Wait for model to be ready first
         await ensure_model_ready()
-        for memory in initial_memories:
-            add_memory(mem0_client, "gavinwood", memory, {"type": "persona_fact"})
-        logger.info("Seeded initial memories for Gavin Wood.")
+        # Import locally to avoid circular import
+        from utils import add_memory
+        
+        logger.info("Starting memory seeding...")
+        success_count = 0
+        for i, memory in enumerate(initial_memories):
+            try:
+                result = add_memory(mem0_client, "gavinwood", memory, {"type": "persona_fact"})
+                if result:
+                    success_count += 1
+                    logger.info(f"Successfully seeded memory {i+1}/{len(initial_memories)}")
+                else:
+                    logger.error(f"Failed to seed memory {i+1}: {memory[:50]}...")
+            except Exception as e:
+                logger.error(f"Error seeding memory {i+1}: {e}")
+        
+        logger.info(f"Memory seeding completed: {success_count}/{len(initial_memories)} memories added")
     except Exception as e:
-        logger.error(f"Error seeding memories: {e}")
+        logger.error(f"Error in seed_memories function: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
 
 @app.on_event("startup")
 async def startup_event():
@@ -205,5 +234,6 @@ async def startup_event():
     loop = asyncio.get_event_loop()
     # Start model initialization in a background thread
     threading.Thread(target=initialize_model, args=(loop,), daemon=True).start()
-    # Skip memory seeding for faster startup - memories will be created as needed
-    logger.info("Application startup tasks initiated. Model loading in background.")
+    # Seed initial memories in background
+    asyncio.create_task(seed_memories())
+    logger.info("Application startup tasks initiated. Model loading and memory seeding in background.")

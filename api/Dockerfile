@@ -7,6 +7,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
+# Install BLEURT dependencies
+RUN pip install --no-cache-dir "evaluate"
+RUN pip install --no-cache-dir "tf-keras"
 RUN pip install --no-cache-dir git+https://github.com/google-research/bleurt.git
 
 # Set longer timeout for HuggingFace downloads

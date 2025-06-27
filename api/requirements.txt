@@ -18,7 +18,3 @@ httpx>=0.24.0
 python-multipart
 neo4j>=5.0.0
 networkx>=3.0
-mem0ai[graph]
-chromadb
-evaluate
-tf-keras

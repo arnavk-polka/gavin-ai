@@ -103,19 +103,19 @@ def create_gavin_bot_handler():
             # Get response using non-streaming method
             full_response = await get_openai_response_sync(prompt)
             
-            # Store memories in background (simplified)
+            # Store only AI response as memory in background
             try:
                 import threading
-                threading.Thread(
-                    target=lambda: add_memory(mem0_client, user_id, f"User: {message['message']}", {"role": "user"}),
-                    daemon=True
-                ).start()
-                threading.Thread(
-                    target=lambda: add_memory(mem0_client, user_id, f"Assistant: {full_response}", {"role": "assistant"}),
-                    daemon=True
-                ).start()
+                def store_ai_memory():
+                    try:
+                        result = add_memory(mem0_client, user_id, f"Assistant: {full_response}", {"role": "assistant"})
+                        logger.info(f"Analyze memory storage result: {result}")
+                    except Exception as e:
+                        logger.warning(f"Failed to store AI memory in analyze: {e}")
+                
+                threading.Thread(target=store_ai_memory, daemon=True).start()
             except Exception as e:
-                logger.warning(f"Failed to store memories in analyze test: {e}")
+                logger.warning(f"Failed to start memory storage thread in analyze: {e}")
             
             return full_response
             

@@ -270,16 +270,23 @@ async def search_serper(query: str, num_results: int = 3) -> str:
 async def store_memories_async(user_id: str, user_message: str, ai_response: str):
     """Store memories asynchronously without blocking the main response"""
     try:
+        logger.info(f"Storing AI response as memory for user {user_id} - Response: {ai_response[:50]}...")
+        
         # Only store the AI response as memory
-        await asyncio.to_thread(
+        ai_result = await asyncio.to_thread(
             add_memory, 
             mem0_client, 
             user_id, 
             f"Assistant: {ai_response}", 
             {"role": "assistant"}
         )
+        
+        logger.info(f"AI response memory storage result: {ai_result}")
+        
     except Exception as e:
         logger.error(f"Error storing memories: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
 
 @router.get("/debug")
 async def debug_redirect():

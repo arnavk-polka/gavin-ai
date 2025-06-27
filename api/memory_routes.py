@@ -3,7 +3,9 @@ import asyncio
 from fastapi import APIRouter, HTTPException, File, Form, UploadFile
 from typing import Optional, List, Dict
 from config import logger, mem0_client, get_embedder
-from utils import add_memory, get_relevant_memories, add_graph_memory, get_graph_memories, build_knowledge_graph, extract_entities, extract_relationships
+from utils import add_memory, get_relevant_memories
+# GRAPH IMPORTS COMMENTED OUT
+# from utils import add_graph_memory, get_graph_memories, build_knowledge_graph, extract_entities, extract_relationships
 
 memory_router = APIRouter(prefix="/memory", tags=["memory"])
 
@@ -38,77 +40,78 @@ async def add_memory_endpoint(data: dict):
         logger.error(f"Error in add_memory endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@memory_router.post("/add-graph")
-async def add_graph_memory_endpoint(data: dict):
-    """Add a graph-structured memory with entities and relationships.
-    
-    Request body:
-    {
-        "user_id": "gavinwood",  // optional, defaults to gavinwood
-        "message": "Your memory content here",
-        "entities": ["Entity1", "Entity2"],  // optional, will be auto-extracted
-        "relationships": [  // optional, will be auto-extracted
-            {
-                "source": "Entity1",
-                "target": "Entity2", 
-                "relationship": "created",
-                "confidence": 0.8
-            }
-        ],
-        "metadata": {"key": "value"}  // optional
-    }
-    """
-    try:
-        user_id = data.get("user_id", "gavinwood")
-        message = data.get("message")
-        entities = data.get("entities")
-        relationships = data.get("relationships")
-        metadata = data.get("metadata", {})
-        
-        if not message:
-            raise HTTPException(status_code=400, detail="Message is required")
-        
-        # Use the utility function to add graph memory
-        success = await asyncio.to_thread(
-            add_graph_memory, 
-            mem0_client, 
-            user_id, 
-            f"Assistant: {message}", 
-            entities, 
-            relationships, 
-            metadata
-        )
-        
-        if success:
-            # Extract entities and relationships for response
-            if not entities:
-                entities = await asyncio.to_thread(extract_entities, message)
-            if not relationships:
-                relationships = await asyncio.to_thread(extract_relationships, message, entities or [])
-                
-            return {
-                "status": "success",
-                "message": "Graph memory added successfully",
-                "user_id": user_id,
-                "entities": entities,
-                "relationships": relationships
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Failed to add graph memory")
-            
-    except Exception as e:
-        logger.error(f"Error in add_graph_memory endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# GRAPH ENDPOINTS COMMENTED OUT
+# @memory_router.post("/add-graph")
+# async def add_graph_memory_endpoint(data: dict):
+#     """Add a graph-structured memory with entities and relationships.
+#     
+#     Request body:
+#     {
+#         "user_id": "gavinwood",  // optional, defaults to gavinwood
+#         "message": "Your memory content here",
+#         "entities": ["Entity1", "Entity2"],  // optional, will be auto-extracted
+#         "relationships": [  // optional, will be auto-extracted
+#             {
+#                 "source": "Entity1",
+#                 "target": "Entity2", 
+#                 "relationship": "created",
+#                 "confidence": 0.8
+#             }
+#         ],
+#         "metadata": {"key": "value"}  // optional
+#     }
+#     """
+#     try:
+#         user_id = data.get("user_id", "gavinwood")
+#         message = data.get("message")
+#         entities = data.get("entities")
+#         relationships = data.get("relationships")
+#         metadata = data.get("metadata", {})
+#         
+#         if not message:
+#             raise HTTPException(status_code=400, detail="Message is required")
+#         
+#         # Use the utility function to add graph memory
+#         success = await asyncio.to_thread(
+#             add_graph_memory, 
+#             mem0_client, 
+#             user_id, 
+#             f"Assistant: {message}", 
+#             entities, 
+#             relationships, 
+#             metadata
+#         )
+#         
+#         if success:
+#             # Extract entities and relationships for response
+#             if not entities:
+#                 entities = await asyncio.to_thread(extract_entities, message)
+#             if not relationships:
+#                 relationships = await asyncio.to_thread(extract_relationships, message, entities or [])
+#                 
+#             return {
+#                 "status": "success",
+#                 "message": "Graph memory added successfully",
+#                 "user_id": user_id,
+#                 "entities": entities,
+#                 "relationships": relationships
+#             }
+#         else:
+#             raise HTTPException(status_code=500, detail="Failed to add graph memory")
+#             
+#     except Exception as e:
+#         logger.error(f"Error in add_graph_memory endpoint: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 @memory_router.post("/search")
 async def search_memories_endpoint(data: dict):
-    """Search memories in mem0.
+    """Search memories by query.
     
     Request body:
     {
         "user_id": "gavinwood",  // optional, defaults to gavinwood
-        "query": "Your search query here",
-        "limit": 5  // optional, defaults to 4
+        "query": "blockchain",  // required - search query
+        "limit": 10  // optional, defaults to 4
     }
     """
     try:
@@ -134,134 +137,167 @@ async def search_memories_endpoint(data: dict):
         logger.error(f"Error in search_memories endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@memory_router.post("/search-graph")
-async def search_graph_memories_endpoint(data: dict):
-    """Search graph memories by entity or relationship.
-    
-    Request body:
-    {
-        "user_id": "gavinwood",  // optional, defaults to gavinwood
-        "entity": "Ethereum",  // required - entity to search for
-        "relationship_type": "created",  // optional - filter by relationship type
-        "limit": 10  // optional, defaults to 10
-    }
-    """
-    try:
-        user_id = data.get("user_id", "gavinwood")
-        entity = data.get("entity")
-        relationship_type = data.get("relationship_type")
-        limit = data.get("limit", 10)
-        
-        if not entity:
-            raise HTTPException(status_code=400, detail="Entity is required")
-        
-        # Use the utility function to search graph memories
-        memories = await asyncio.to_thread(
-            get_graph_memories, 
-            mem0_client, 
-            user_id, 
-            entity, 
-            relationship_type, 
-            limit
-        )
-        
-        return {
-            "status": "success",
-            "user_id": user_id,
-            "entity": entity,
-            "relationship_type": relationship_type,
-            "memories": memories,
-            "count": len(memories)
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in search_graph_memories endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# @memory_router.post("/search-graph")
+# async def search_graph_memories_endpoint(data: dict):
+#     """Search graph memories by entity or relationship.
+#     
+#     Request body:
+#     {
+#         "user_id": "gavinwood",  // optional, defaults to gavinwood
+#         "entity": "Ethereum",  // required - entity to search for
+#         "relationship_type": "created",  // optional - filter by relationship type
+#         "limit": 10  // optional, defaults to 10
+#     }
+#     """
+#     try:
+#         user_id = data.get("user_id", "gavinwood")
+#         entity = data.get("entity")
+#         relationship_type = data.get("relationship_type")
+#         limit = data.get("limit", 10)
+#         
+#         if not entity:
+#             raise HTTPException(status_code=400, detail="Entity is required")
+#         
+#         # Use the utility function to search graph memories
+#         memories = await asyncio.to_thread(
+#             get_graph_memories, 
+#             mem0_client, 
+#             user_id, 
+#             entity, 
+#             relationship_type, 
+#             limit
+#         )
+#         
+#         return {
+#             "status": "success",
+#             "user_id": user_id,
+#             "entity": entity,
+#             "relationship_type": relationship_type,
+#             "memories": memories,
+#             "count": len(memories)
+#         }
+#         
+#     except Exception as e:
+#         logger.error(f"Error in search_graph_memories endpoint: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
-@memory_router.get("/graph/{user_id}")
-async def get_knowledge_graph_endpoint(user_id: str = "gavinwood"):
-    """Build and return the knowledge graph for a user.
+# @memory_router.get("/graph/{user_id}")
+# async def get_knowledge_graph_endpoint(user_id: str = "gavinwood"):
+#     """Build and return the knowledge graph for a user.
+#     
+#     Path parameters:
+#     - user_id: User ID (defaults to gavinwood)
+#     """
+#     try:
+#         # Build the knowledge graph
+#         graph = await asyncio.to_thread(build_knowledge_graph, mem0_client, user_id)
+#         
+#         return {
+#             "status": "success",
+#             "user_id": user_id,
+#             "graph": graph
+#         }
+#         
+#     except Exception as e:
+#         logger.error(f"Error in get_knowledge_graph endpoint: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
+
+@memory_router.post("/upload-doc")
+async def upload_document_endpoint(
+    file: UploadFile = File(...),
+    user_id: str = Form("gavinwood"),
+    doc_type: str = Form("document"),
+    metadata: str = Form("{}")
+):
+    """Upload and process a document into memories.
     
-    Path parameters:
+    Parameters:
+    - file: Document file (PDF, TXT, etc.)
     - user_id: User ID (defaults to gavinwood)
+    - doc_type: Type of document (defaults to "document")
+    - metadata: JSON string of additional metadata
     """
     try:
-        # Build the knowledge graph
-        graph = await asyncio.to_thread(build_knowledge_graph, mem0_client, user_id)
+        # Read file content
+        content = await file.read()
+        
+        # Parse metadata
+        try:
+            metadata_dict = json.loads(metadata)
+        except:
+            metadata_dict = {}
+        
+        # Add file info to metadata
+        metadata_dict.update({
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "doc_type": doc_type,
+            "upload_type": "document"
+        })
+        
+        # Process based on file type
+        if file.content_type == "text/plain" or file.filename.endswith('.txt'):
+            text_content = content.decode('utf-8')
+        elif file.content_type == "application/pdf" or file.filename.endswith('.pdf'):
+            # For PDF, we'd need a PDF parser - for now just handle as text
+            try:
+                text_content = content.decode('utf-8')
+            except:
+                raise HTTPException(status_code=400, detail="Could not process PDF file")
+        else:
+            try:
+                text_content = content.decode('utf-8')
+            except:
+                raise HTTPException(status_code=400, detail="Unsupported file type")
+        
+        # Split content into chunks (simple sentence-based splitting)
+        chunks = []
+        sentences = text_content.split('. ')
+        
+        current_chunk = ""
+        for sentence in sentences:
+            if len(current_chunk + sentence) < 500:  # Keep chunks under 500 chars
+                current_chunk += sentence + ". "
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = sentence + ". "
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        # Add each chunk as a memory
+        added_memories = 0
+        for i, chunk in enumerate(chunks):
+            if chunk.strip():
+                chunk_metadata = metadata_dict.copy()
+                chunk_metadata.update({
+                    "chunk_index": i,
+                    "total_chunks": len(chunks)
+                })
+                
+                success = await asyncio.to_thread(
+                    add_memory, 
+                    mem0_client, 
+                    user_id, 
+                    f"Assistant: Document content from {file.filename}: {chunk}", 
+                    chunk_metadata
+                )
+                
+                if success:
+                    added_memories += 1
         
         return {
             "status": "success",
+            "message": f"Document processed and {added_memories} memories added",
             "user_id": user_id,
-            "graph": graph
+            "filename": file.filename,
+            "chunks_processed": len(chunks),
+            "memories_added": added_memories
         }
         
     except Exception as e:
-        logger.error(f"Error in get_knowledge_graph endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@memory_router.post("/entities/extract")
-async def extract_entities_endpoint(data: dict):
-    """Extract entities from text.
-    
-    Request body:
-    {
-        "text": "Your text here"
-    }
-    """
-    try:
-        text = data.get("text")
-        
-        if not text:
-            raise HTTPException(status_code=400, detail="Text is required")
-        
-        # Extract entities
-        entities = await asyncio.to_thread(extract_entities, text)
-        
-        return {
-            "status": "success",
-            "text": text,
-            "entities": entities,
-            "count": len(entities)
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in extract_entities endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@memory_router.post("/relationships/extract")
-async def extract_relationships_endpoint(data: dict):
-    """Extract relationships from text.
-    
-    Request body:
-    {
-        "text": "Your text here",
-        "entities": ["Entity1", "Entity2"]  // optional, will be auto-extracted
-    }
-    """
-    try:
-        text = data.get("text")
-        entities = data.get("entities")
-        
-        if not text:
-            raise HTTPException(status_code=400, detail="Text is required")
-        
-        # Extract entities if not provided
-        if not entities:
-            entities = await asyncio.to_thread(extract_entities, text)
-        
-        # Extract relationships
-        relationships = await asyncio.to_thread(extract_relationships, text, entities)
-        
-        return {
-            "status": "success",
-            "text": text,
-            "entities": entities,
-            "relationships": relationships,
-            "count": len(relationships)
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in extract_relationships endpoint: {e}")
+        logger.error(f"Error in upload_document endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @memory_router.get("/list/{user_id}")
@@ -303,330 +339,120 @@ async def list_memories_endpoint(user_id: str = "gavinwood", limit: int = 10):
             logger.error(f"Error in fallback search: {e2}")
             raise HTTPException(status_code=500, detail=str(e))
 
-@memory_router.delete("/{memory_id}")
-async def delete_memory_endpoint(memory_id: str, user_id: str = "gavinwood"):
-    """Delete a specific memory by ID.
+@memory_router.delete("/delete/{user_id}")
+async def delete_memory_endpoint(user_id: str, memory_id: str):
+    """Delete a specific memory.
     
     Path parameters:
-    - memory_id: The ID of the memory to delete
-    
-    Query parameters:
-    - user_id: User ID (defaults to gavinwood)
+    - user_id: User ID
+    - memory_id: Memory ID to delete (passed as query parameter)
     """
     try:
-        # Delete memory using mem0 client
-        result = await asyncio.to_thread(
-            lambda: mem0_client.delete(memory_id=memory_id)
+        # Delete the memory
+        await asyncio.to_thread(
+            lambda: mem0_client.delete(memory_id=memory_id, user_id=user_id)
         )
         
         return {
             "status": "success",
-            "message": f"Memory {memory_id} deleted successfully",
-            "user_id": user_id
+            "message": "Memory deleted successfully",
+            "user_id": user_id,
+            "memory_id": memory_id
         }
         
     except Exception as e:
         logger.error(f"Error in delete_memory endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@memory_router.post("/bulk-add")
-async def bulk_add_memories_endpoint(
-    file: UploadFile = File(...),
-    user_id: str = Form("gavinwood"),
-    metadata: str = Form("{}")
-):
-    """Add multiple memories at once from a JSON file.
+@memory_router.delete("/delete-all/{user_id}")
+async def delete_all_memories_endpoint(user_id: str = "gavinwood"):
+    """Delete all memories for a user.
     
-    Form fields:
-    - file: JSON file containing memory object(s) (required)
-    - user_id: User ID (optional, defaults to gavinwood)
-    - metadata: JSON string with metadata to apply to all memories (optional)
-    
-    Metadata JSON format:
-    {
-        "category": "article",
-        "type": "knowledge", 
-        "source": "web",
-        "tags": ["blockchain", "ethereum"]
-    }
-    
-    File can contain single object or array:
-    {
-        "url": "https://example.com/article1",
-        "title": "Article Title",
-        "description": "Article description content",
-        "content": "Full article content..."
-    }
-    
-    OR array:
-    [
-        {
-            "url": "https://example.com/article1",
-            "title": "Article Title", 
-            "description": "Article description content",
-            "content": "Full article content..."
-        }
-    ]
+    Path parameters:
+    - user_id: User ID (defaults to gavinwood)
     """
     try:
-        # Parse metadata
-        try:
-            base_metadata = json.loads(metadata)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid metadata JSON format")
-        
-        # Read from uploaded file
-        try:
-            file_content = await file.read()
-            data = json.loads(file_content.decode('utf-8'))
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON format in uploaded file")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error reading file: {str(e)}")
-        
-        # Handle both single object and array formats
-        if isinstance(data, dict):
-            # Single object - convert to array
-            memories = [data]
-        elif isinstance(data, list):
-            # Already an array
-            memories = data
-        else:
-            raise HTTPException(status_code=400, detail="File must contain a JSON object or array of objects")
-        
-        if not memories:
-            raise HTTPException(status_code=400, detail="File must contain at least one memory")
-        
-        results = []
-        for i, memory_data in enumerate(memories):
-            url = memory_data.get("url")
-            title = memory_data.get("title")
-            description = memory_data.get("description")
-            content = memory_data.get("content", "")
-            
-            # Validate required fields
-            if not url:
-                results.append({"index": i, "status": "failed", "error": "URL is required"})
-                continue
-            if not title:
-                results.append({"index": i, "status": "failed", "error": "Title is required"})
-                continue
-            if not description:
-                results.append({"index": i, "status": "failed", "error": "Description is required"})
-                continue
-            
-            # Build the memory message from the structured data
-            # Use content if available, otherwise use description
-            main_content = content if content else description
-            memory_message = f"Title: {title}\nURL: {url}\nDescription: {description}"
-            if content and content != description:
-                memory_message += f"\nContent: {content}"
-            
-            # Create metadata for this memory, combining base metadata with specific fields
-            memory_metadata = base_metadata.copy()
-            memory_metadata.update({
-                "url": url,
-                "title": title,
-                "category": base_metadata.get("category", "unknown"),
-                "type": base_metadata.get("type", "knowledge"),
-                "source": base_metadata.get("source", "bulk_add")
-            })
-            
-            try:
-                success = await asyncio.to_thread(
-                    add_memory, mem0_client, user_id, f"Assistant: {memory_message}", memory_metadata
-                )
-                if success:
-                    results.append({"index": i, "status": "success", "url": url, "title": title})
-                else:
-                    results.append({"index": i, "status": "failed", "error": "Unknown error", "url": url})
-            except Exception as e:
-                results.append({"index": i, "status": "failed", "error": str(e), "url": url})
-        
-        successful = len([r for r in results if r["status"] == "success"])
-        failed = len(results) - successful
+        # Delete all memories for the user
+        await asyncio.to_thread(
+            lambda: mem0_client.delete_all(user_id=user_id)
+        )
         
         return {
-            "status": "completed",
-            "user_id": user_id,
-            "total_memories": len(memories),
-            "successful": successful,
-            "failed": failed,
-            "results": results,
-            "applied_metadata": base_metadata
+            "status": "success",
+            "message": "All memories deleted successfully",
+            "user_id": user_id
         }
         
     except Exception as e:
-        logger.error(f"Error in bulk_add_memories endpoint: {e}")
+        logger.error(f"Error in delete_all_memories endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@memory_router.post("/add-document")
-async def add_document_endpoint(data: dict):
-    """Process and add a long document using semantic chunking with nomic embedder.
-    
-    Request body:
-    {
-        "user_id": "gavinwood",  // optional, defaults to gavinwood
-        "document": {
-            "title": "Document Title",
-            "content": "Very long document content...",
-            "chunk_size": 300,  // optional, target words per chunk
-            "overlap": 50,      // optional, overlap between chunks
-            "metadata": {}      // optional, additional metadata
-        }
-    }
-    """
+@memory_router.get("/count/{user_id}")
+async def count_memories_endpoint(user_id: str = "gavinwood"):
+    """Count total memories for a user."""
     try:
-        import re
-        import numpy as np
-        
-        user_id = data.get("user_id", "gavinwood")
-        document_data = data.get("document", {})
-        
-        title = document_data.get("title", "Untitled Document")
-        content = document_data.get("content")
-        target_chunk_size = document_data.get("chunk_size", 300)  # words
-        overlap_size = document_data.get("overlap", 50)  # words
-        base_metadata = document_data.get("metadata", {})
-        
-        if not content:
-            raise HTTPException(status_code=400, detail="Document content is required")
-        
-        # Get the nomic embedder
-        embedder = await asyncio.to_thread(get_embedder)
-        
-        def split_into_sentences(text):
-            """Split text into sentences using regex."""
-            sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-            return [s.strip() for s in sentences if s.strip()]
-        
-        def create_semantic_chunks(sentences, embedder, target_size=300, overlap=50):
-            """Create chunks based on semantic similarity using embeddings."""
-            if not sentences:
-                return []
-            
-            # Get embeddings for all sentences
-            logger.info(f"Computing embeddings for {len(sentences)} sentences...")
-            embeddings = embedder.encode(sentences)
-            
-            chunks = []
-            current_chunk = []
-            current_word_count = 0
-            
-            i = 0
-            while i < len(sentences):
-                sentence = sentences[i]
-                word_count = len(sentence.split())
-                
-                # If adding this sentence would exceed target size, finalize current chunk
-                if current_word_count + word_count > target_size and current_chunk:
-                    # Finalize current chunk
-                    chunk_text = ' '.join(current_chunk)
-                    chunks.append(chunk_text)
-                    
-                    # Start new chunk with overlap
-                    if overlap > 0 and len(current_chunk) > 1:
-                        # Keep last few sentences for overlap
-                        overlap_sentences = []
-                        overlap_words = 0
-                        for sent in reversed(current_chunk):
-                            sent_words = len(sent.split())
-                            if overlap_words + sent_words <= overlap:
-                                overlap_sentences.insert(0, sent)
-                                overlap_words += sent_words
-                            else:
-                                break
-                        current_chunk = overlap_sentences
-                        current_word_count = overlap_words
-                    else:
-                        current_chunk = []
-                        current_word_count = 0
-                
-                # Add current sentence
-                current_chunk.append(sentence)
-                current_word_count += word_count
-                i += 1
-            
-            # Add final chunk if it exists
-            if current_chunk:
-                chunk_text = ' '.join(current_chunk)
-                chunks.append(chunk_text)
-            
-            return chunks
-        
-        # Process the document
-        logger.info(f"Processing document: {title}")
-        sentences = await asyncio.to_thread(split_into_sentences, content)
-        logger.info(f"Split into {len(sentences)} sentences")
-        
-        chunks = await asyncio.to_thread(
-            create_semantic_chunks, 
-            sentences, 
-            embedder, 
-            target_chunk_size, 
-            overlap_size
+        # Get all memories to count them
+        memories = await asyncio.to_thread(
+            lambda: mem0_client.get_all(user_id=user_id, limit=1000)
         )
-        logger.info(f"Created {len(chunks)} semantic chunks")
         
-        # Add chunks to memory
-        results = []
-        for i, chunk in enumerate(chunks):
-            chunk_metadata = {
-                **base_metadata,
-                "document_title": title,
-                "chunk_index": i,
-                "total_chunks": len(chunks),
-                "chunk_type": "semantic",
-                "word_count": len(chunk.split())
-            }
-            
-            try:
-                success = await asyncio.to_thread(
-                    add_memory, 
-                    mem0_client, 
-                    user_id, 
-                    f"Assistant: {chunk}", 
-                    chunk_metadata
-                )
-                if success:
-                    results.append({
-                        "chunk_index": i,
-                        "status": "success",
-                        "word_count": len(chunk.split()),
-                        "preview": chunk[:100] + "..." if len(chunk) > 100 else chunk
-                    })
-                else:
-                    results.append({
-                        "chunk_index": i,
-                        "status": "failed",
-                        "error": "Failed to add to mem0"
-                    })
-            except Exception as e:
-                results.append({
-                    "chunk_index": i,
-                    "status": "failed", 
-                    "error": str(e)
-                })
-        
-        successful = len([r for r in results if r["status"] == "success"])
-        failed = len(results) - successful
+        # Also try search with a broad query
+        search_memories = await asyncio.to_thread(
+            lambda: mem0_client.search("", user_id=user_id, limit=1000)
+        )
         
         return {
-            "status": "completed",
-            "document_title": title,
+            "status": "success",
             "user_id": user_id,
-            "total_chunks": len(chunks),
-            "successful_chunks": successful,
-            "failed_chunks": failed,
-            "processing_summary": {
-                "original_sentences": len(sentences),
-                "target_chunk_size": target_chunk_size,
-                "overlap_size": overlap_size,
-                "avg_chunk_size": sum(len(chunk.split()) for chunk in chunks) // len(chunks) if chunks else 0
-            },
-            "results": results
+            "total_memories_get_all": len(memories) if memories else 0,
+            "total_memories_search": len(search_memories.get('results', [])) if isinstance(search_memories, dict) else len(search_memories) if search_memories else 0,
+            "memories_sample": memories[:3] if memories else [],
+            "search_sample": search_memories
         }
         
     except Exception as e:
-        logger.error(f"Error in add_document endpoint: {e}")
+        logger.error(f"Error counting memories: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@memory_router.post("/test")
+async def test_mem0_endpoint():
+    """Test mem0 functionality - add a test memory and search for it."""
+    try:
+        test_message = "Test memory: Gavin Wood created Polkadot"
+        user_id = "gavinwood"
+        
+        # Test adding memory
+        logger.info(f"Testing mem0 add operation...")
+        add_result = await asyncio.to_thread(add_memory, mem0_client, user_id, test_message, {"test": True})
+        
+        if not add_result:
+            return {
+                "status": "error",
+                "message": "Failed to add test memory",
+                "add_result": add_result
+            }
+        
+        # Test searching memories
+        logger.info(f"Testing mem0 search operation...")
+        search_result = await asyncio.to_thread(get_relevant_memories, mem0_client, user_id, "Polkadot", 5)
+        
+        # Test raw search
+        raw_search = await asyncio.to_thread(
+            lambda: mem0_client.search("Polkadot", user_id=user_id, limit=5)
+        )
+        
+        return {
+            "status": "success",
+            "test_memory_added": add_result,
+            "search_results": search_result,
+            "raw_search_result": raw_search,
+            "search_count": len(search_result) if search_result else 0
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in test_mem0 endpoint: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e)) 
