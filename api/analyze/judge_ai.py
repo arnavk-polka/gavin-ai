@@ -80,15 +80,15 @@ class JudgeAI:
                     legacy_evaluation["bleurt_score"] = bleurt_score
                     legacy_evaluation["bleurt_interpretation"] = bleurt_interpretation
                     
-                    # Update overall score to include BLEURT (weighted average)
-                    # 70% MT-Bench, 30% BLEURT
-                    original_score = legacy_evaluation["overall_score"]
-                    weighted_score = (0.7 * original_score) + (0.3 * bleurt_score)
+                    # Weight the original score with BLEURT for better accuracy
+                    # Normalize BLEURT just for weighting calculation
+                    normalized_bleurt = self._normalize_bleurt_for_weighting(bleurt_score)
+                    weighted_score = (0.7 * mt_evaluation.overall_score) + (0.3 * normalized_bleurt)
                     legacy_evaluation["overall_score"] = weighted_score
-                    legacy_evaluation["original_mt_bench_score"] = original_score
+                    legacy_evaluation["original_mt_bench_score"] = mt_evaluation.overall_score
                     
                     logger.info(f"BLEURT score: {bleurt_score:.3f} ({bleurt_interpretation})")
-                    logger.info(f"Updated overall score: {weighted_score:.3f} (was {original_score:.3f})")
+                    logger.info(f"Updated overall score: {weighted_score:.3f} (was {mt_evaluation.overall_score:.3f})")
                     
                 except Exception as e:
                     logger.error(f"BLEURT scoring failed: {e}")
@@ -149,7 +149,8 @@ class JudgeAI:
                     "bleurt_analysis": f"BLEURT semantic similarity: {bleurt_score:.3f} - {bleurt_interpretation}"
                 },
                 "evaluation_method": "bleurt_only",
-                "confidence": 1.0  # BLEURT gives deterministic scores
+                "confidence": 1.0,  # BLEURT gives deterministic scores
+                "quality_distribution": self._analyze_quality_distribution_raw_bleurt([bleurt_score])
             }
             
             logger.info(f"BLEURT-only evaluation complete - Score: {bleurt_score:.3f}")
@@ -234,12 +235,12 @@ class JudgeAI:
                             evaluation["bleurt_score"] = bleurt_score
                             evaluation["bleurt_interpretation"] = bleurt_interpretation
                             
-                            # Update overall score to include BLEURT (weighted average)
-                            # 70% legacy, 30% BLEURT
-                            original_score = evaluation["overall_score"]
-                            weighted_score = (0.7 * original_score) + (0.3 * bleurt_score)
+                            # Weight the original score with BLEURT
+                            # Normalize BLEURT just for weighting calculation
+                            normalized_bleurt = self._normalize_bleurt_for_weighting(bleurt_score)
+                            weighted_score = (0.7 * evaluation["overall_score"]) + (0.3 * normalized_bleurt)
                             evaluation["overall_score"] = weighted_score
-                            evaluation["original_legacy_score"] = original_score
+                            evaluation["original_legacy_score"] = evaluation["overall_score"]
                             
                             # Enhance reasoning with BLEURT insights
                             if "reasoning" not in evaluation:
@@ -249,7 +250,7 @@ class JudgeAI:
                             )
                             
                             logger.info(f"BLEURT score: {bleurt_score:.3f} ({bleurt_interpretation})")
-                            logger.info(f"Updated overall score: {weighted_score:.3f} (was {original_score:.3f})")
+                            logger.info(f"Updated overall score: {weighted_score:.3f} (was {evaluation['overall_score']:.3f})")
                             
                         except Exception as e:
                             logger.error(f"BLEURT scoring failed: {e}")
@@ -411,12 +412,12 @@ class JudgeAI:
                         evaluation_data["bleurt_interpretation"] = bleurt_interpretation
                         evaluation_data["evaluation_method"] = "mt_bench_with_bleurt"
                         
-                        # Update overall score to include BLEURT (weighted average)
-                        # 70% MT-Bench, 30% BLEURT
-                        original_score = evaluation_data["overall_score"]
-                        weighted_score = (0.7 * original_score) + (0.3 * bleurt_score)
+                        # Weight the original score with BLEURT for better accuracy
+                        # Normalize BLEURT just for weighting calculation
+                        normalized_bleurt = self._normalize_bleurt_for_weighting(bleurt_score)
+                        weighted_score = (0.7 * mt_eval.overall_score) + (0.3 * normalized_bleurt)
                         evaluation_data["overall_score"] = weighted_score
-                        evaluation_data["original_mt_bench_score"] = original_score
+                        evaluation_data["original_mt_bench_score"] = mt_eval.overall_score
                         
                         # Enhance reasoning with BLEURT insights
                         evaluation_data["reasoning"]["bleurt_analysis"] = (
@@ -424,7 +425,7 @@ class JudgeAI:
                         )
                         
                         logger.info(f"  Added BLEURT score: {bleurt_score:.3f} ({bleurt_interpretation})")
-                        logger.info(f"  Updated overall score: {weighted_score:.3f} (was {original_score:.3f})")
+                        logger.info(f"  Updated overall score: {weighted_score:.3f} (was {mt_eval.overall_score:.3f})")
                     
                     result["evaluation"] = evaluation_data
                     result["expected_answer"] = qa_pairs[i].get("answer", "")
@@ -506,7 +507,8 @@ class JudgeAI:
                             "bleurt_analysis": f"BLEURT semantic similarity: {bleurt_score:.3f} - {bleurt_interpretation}"
                         },
                         "evaluation_method": "bleurt_only",
-                        "confidence": 1.0
+                        "confidence": 1.0,
+                        "quality_distribution": self._analyze_quality_distribution_raw_bleurt([bleurt_score])
                     }
                     result["expected_answer"] = qa_pairs[i].get("answer", "")
                     
@@ -633,7 +635,7 @@ class JudgeAI:
                 "min_bleurt_score": bleurt_min,
                 "max_bleurt_score": bleurt_max,
                 "bleurt_evaluations_count": len(valid_bleurt_scores),
-                "bleurt_pass_rate": len([s for s in valid_bleurt_scores if s >= 0.5]) / len(valid_bleurt_scores)
+                "bleurt_pass_rate": len([s for s in valid_bleurt_scores if s >= 0.0]) / len(valid_bleurt_scores)
             }
             
             logger.info(f"BLEURT metrics added:")
@@ -692,7 +694,7 @@ class JudgeAI:
         # Calculate metrics
         avg_bleurt = sum(bleurt_scores) / len(bleurt_scores)
         avg_overall = sum(overall_scores) / len(overall_scores)
-        pass_rate = len([s for s in bleurt_scores if s >= 0.5]) / len(bleurt_scores)
+        pass_rate = len([s for s in bleurt_scores if s >= 0.0]) / len(bleurt_scores)
         
         metrics = {
             "total_questions": len(evaluated_results),
@@ -702,7 +704,8 @@ class JudgeAI:
             "min_bleurt_score": min(bleurt_scores),
             "max_bleurt_score": max(bleurt_scores),
             "pass_rate": pass_rate,
-            "evaluation_method": "bleurt_only"
+            "evaluation_method": "bleurt_only",
+            "quality_distribution": self._analyze_quality_distribution_raw_bleurt(bleurt_scores)
         }
         
         logger.info(f"BLEURT-only metrics:")
@@ -916,4 +919,55 @@ class JudgeAI:
             "total_responses": 0,
             "pass_rate": 0.0,
             "evaluation_method": "legacy"
-        } 
+        }
+
+    def _analyze_quality_distribution_raw_bleurt(self, bleurt_scores: List[float]) -> Dict[str, int]:
+        """
+        Analyze the distribution of raw BLEURT scores.
+        
+        Args:
+            bleurt_scores: List of raw BLEURT scores
+            
+        Returns:
+            Dictionary with score distribution counts
+        """
+        distribution = {
+            "excellent": 0,    # >= 1.0
+            "good": 0,         # 0.5 to 0.99
+            "moderate": 0,     # 0.0 to 0.49
+            "fair": 0,         # -0.5 to -0.01
+            "poor": 0,         # -1.0 to -0.51
+            "very_poor": 0     # < -1.0
+        }
+        
+        for score in bleurt_scores:
+            if score >= 1.0:
+                distribution["excellent"] += 1
+            elif score >= 0.5:
+                distribution["good"] += 1
+            elif score >= 0.0:
+                distribution["moderate"] += 1
+            elif score >= -0.5:
+                distribution["fair"] += 1
+            elif score >= -1.0:
+                distribution["poor"] += 1
+            else:
+                distribution["very_poor"] += 1
+        
+        return distribution
+    
+    def _normalize_bleurt_for_weighting(self, raw_bleurt_score: float) -> float:
+        """
+        Normalize BLEURT score to 0-1 range only for weighted calculations.
+        This preserves raw scores for display but allows proper weighting with other 0-1 scores.
+        
+        Args:
+            raw_bleurt_score: Raw BLEURT score (-2 to +2 range)
+            
+        Returns:
+            Normalized score (0-1) for weighting purposes only
+        """
+        # Simple linear normalization: map -2,+2 to 0,1
+        # This is only used for weighted calculations, not for display
+        normalized = (raw_bleurt_score + 2) / 4
+        return max(0.0, min(1.0, normalized)) 

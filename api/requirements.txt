@@ -16,5 +16,7 @@ tqdm>=4.66.1
 einops>=0.7.0
 httpx>=0.24.0 
 python-multipart
-neo4j>=5.0.0
-networkx>=3.0
+spacy>=3.7.0
+evaluate>=0.4.0
+scikit-learn>=1.0.0
+tensorflow>=2.12.0

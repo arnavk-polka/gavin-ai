@@ -469,6 +469,19 @@
             
             <textarea class="text-area" id="transcriptText" placeholder="Or paste your podcast transcript directly here..."></textarea>
             
+            <!-- BLEURT Recommendation Notice -->
+            <div id="bleurtNotice" style="background: #e3f7ff; border: 1px solid #17a2b8; border-radius: 8px; padding: 15px; margin: 15px 0; display: none;">
+                <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                    <span style="font-size: 1.2em; margin-right: 8px;">📊</span>
+                    <strong style="color: #17a2b8;">BLEURT Evaluation Recommendation</strong>
+                </div>
+                <p style="margin: 0; color: #0c5460; line-height: 1.5;">
+                    For reliable BLEURT scores, include <strong>at least 3 question-answer pairs</strong> in your transcript. 
+                    BLEURT documentation recommends using multiple samples to calculate more accurate average semantic similarity scores.
+                </p>
+                <div id="pairCount" style="margin-top: 8px; font-size: 0.9em; color: #666;"></div>
+            </div>
+            
             <button class="start-test-btn" id="startTestBtn" onclick="startStressTest()" disabled>
                 Start Transcript Test
             </button>
@@ -590,8 +603,61 @@
         }
 
         function updateStartButton() {
-            const hasContent = transcriptText.value.trim().length > 0;
-            startTestBtn.disabled = !hasContent;
+            const content = transcriptText.value.trim();
+            const hasContent = content.length > 0;
+            
+            if (!hasContent) {
+                startTestBtn.disabled = true;
+                document.getElementById('bleurtNotice').style.display = 'none';
+                return;
+            }
+            
+            // Count potential Q&A pairs in the transcript
+            const qaCount = countQuestionAnswerPairs(content);
+            const bleurtNotice = document.getElementById('bleurtNotice');
+            const pairCount = document.getElementById('pairCount');
+            
+            // Show BLEURT notice when there's content
+            bleurtNotice.style.display = 'block';
+            
+            if (qaCount >= 3) {
+                pairCount.innerHTML = `✅ <strong>${qaCount} potential Q&A pairs detected</strong> - Good for reliable BLEURT evaluation`;
+                pairCount.style.color = '#28a745';
+                startTestBtn.disabled = false;
+            } else if (qaCount > 0) {
+                pairCount.innerHTML = `⚠️ <strong>${qaCount} potential Q&A pairs detected</strong> - Consider adding more for better BLEURT accuracy`;
+                pairCount.style.color = '#ffc107';
+                startTestBtn.disabled = false; // Allow but warn
+            } else {
+                pairCount.innerHTML = `❌ <strong>No clear Q&A pairs detected</strong> - Add question-answer format content`;
+                pairCount.style.color = '#dc3545';
+                startTestBtn.disabled = false; // Let backend handle parsing
+            }
+        }
+        
+        function countQuestionAnswerPairs(text) {
+            // Simple heuristic to count potential Q&A pairs
+            // Look for patterns like "Q:", "Question:", "A:", "Answer:", etc.
+            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 10);
+            
+            let questionCount = 0;
+            let answerCount = 0;
+            
+            for (const line of lines) {
+                const lowerLine = line.toLowerCase();
+                // Count question patterns
+                if (lowerLine.match(/^(q\d*[:.]|question\d*[:.]|\d+\.?\s*q[:.]|.*\?)/)) {
+                    questionCount++;
+                }
+                // Count answer patterns
+                if (lowerLine.match(/^(a\d*[:.]|answer\d*[:.]|\d+\.?\s*a[:.])/) || 
+                    (questionCount > answerCount && line.length > 20 && !lowerLine.includes('?'))) {
+                    answerCount++;
+                }
+            }
+            
+            // Return the minimum of questions and answers as potential pairs
+            return Math.min(questionCount, answerCount);
         }
 
         function formatFileSize(bytes) {
@@ -655,7 +721,8 @@
             }
             
             testCompleted = false; // Reset completion flag
-            statusCheckInterval = setInterval(checkStatus, 2000);
+            // Use more frequent checks during potential BLEURT loading
+            statusCheckInterval = setInterval(checkStatus, 1500);
             checkStatus(); // Initial check
         }
 
@@ -664,11 +731,23 @@
 
             try {
                 const endpoint = currentTab === 'transcript' ? '/analyze/status' : '/analyze/multi-turn/status';
-                const response = await fetch(endpoint);
+                // Increase timeout for BLEURT model loading scenarios
+                const response = await fetch(endpoint, { 
+                    signal: AbortSignal.timeout(10000) // 10 second timeout
+                });
                 const status = await response.json();
                 
                 if (status) {
                     updateProgressDisplay(status);
+                    
+                    // Adjust check frequency based on current step
+                    if (status.progress?.current_step === 'loading_bleurt') {
+                        // Check less frequently during BLEURT loading to reduce server load
+                        if (statusCheckInterval) {
+                            clearInterval(statusCheckInterval);
+                            statusCheckInterval = setInterval(checkStatus, 3000); // 3 second intervals
+                        }
+                    }
                     
                     if (status.status === 'completed' && !testCompleted) {
                         testCompleted = true;
@@ -684,7 +763,12 @@
                     }
                 }
             } catch (error) {
-                console.error('Error checking status:', error);
+                if (error.name === 'TimeoutError') {
+                    console.warn('Status check timeout - BLEURT model may be loading');
+                    // Don't treat timeout as failure during potential model loading
+                } else {
+                    console.error('Error checking status:', error);
+                }
             }
         }
 
@@ -734,15 +818,21 @@
                 const step = status.progress.current_step;
                 const questionsTotal = status.progress.questions_total || 1;
                 const questionsCompleted = status.progress.questions_completed || 0;
+                const evaluationProgress = status.progress.evaluation_progress || 0;
                 
                 switch (step) {
                     case 'parsing_transcript': return 10;
                     case 'testing_responses': 
                         return 20 + (questionsCompleted / questionsTotal) * 50;
-                    case 'evaluating_responses': return 70 + (questionsCompleted / questionsTotal) * 20;
+                    case 'loading_bleurt':
+                        // Show gradual progress during BLEURT loading (70-85%)
+                        return 70 + Math.min(evaluationProgress * 15, 15);
+                    case 'evaluating_responses': 
+                        // BLEURT evaluation phase (85-95%)
+                        return 85 + (questionsCompleted / questionsTotal) * 10;
                     case 'calculating_metrics': return 95;
                     case 'completed': return 100;
-                    default: return 0;
+                    default: return Math.max(0, evaluationProgress * 10); // Fallback with some progress
                 }
             } else {
                 // For multi-turn tests
@@ -760,7 +850,8 @@
                 const statusTexts = {
                     'parsing_transcript': 'Parsing transcript and extracting Q&A pairs...',
                     'testing_responses': 'Testing bot responses to questions...',
-                    'evaluating_responses': 'Evaluating response quality...',
+                    'evaluating_responses': 'Evaluating response quality (loading BLEURT model if needed)...',
+                    'loading_bleurt': 'Loading BLEURT model for semantic evaluation (this may take 1-2 minutes)...',
                     'calculating_metrics': 'Calculating final metrics...',
                     'completed': 'Test completed successfully!',
                     'failed': 'Test failed'
@@ -788,7 +879,7 @@
                 // Show BLEURT-only metrics for transcript tests
                 metricsContainer.innerHTML = `
                     <div class="metric-card" style="border: 2px solid #17a2b8;">
-                        <div class="metric-value">${(metrics.avg_bleurt_score * 100).toFixed(1)}%</div>
+                        <div class="metric-value">${metrics.avg_bleurt_score.toFixed(3)}</div>
                         <div class="metric-label">BLEURT Score</div>
                     </div>
                     <div class="metric-card">
@@ -800,7 +891,7 @@
                         <div class="metric-label">Total Evaluations</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-value">${(metrics.min_bleurt_score * 100).toFixed(1)}% - ${(metrics.max_bleurt_score * 100).toFixed(1)}%</div>
+                        <div class="metric-value">${metrics.min_bleurt_score.toFixed(3)} - ${metrics.max_bleurt_score.toFixed(3)}</div>
                         <div class="metric-label">Score Range</div>
                     </div>
                 `;
@@ -927,7 +1018,7 @@
                                         <strong>Evaluation (BLEURT-Only):</strong>
                                         <div style="background: #e3f7ff; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #17a2b8;">
                                             <div style="text-align: center; margin-bottom: 15px;">
-                                                <div style="font-size: 2em; font-weight: bold; color: #17a2b8;">${(result.evaluation.bleurt_score * 100).toFixed(1)}%</div>
+                                                <div style="font-size: 2em; font-weight: bold; color: #17a2b8;">${result.evaluation.bleurt_score.toFixed(3)}</div>
                                                 <div style="font-size: 1.1em; color: #666; margin-top: 5px;">${result.evaluation.bleurt_interpretation || 'BLEURT Semantic Similarity'}</div>
                                             </div>
                                             <div style="background: white; padding: 10px; border-radius: 4px;">

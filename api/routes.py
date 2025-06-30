@@ -11,6 +11,7 @@ from utils import preprocess_tweet, add_memory, get_relevant_memories
 from prompt_builder import craft
 from memory_routes import memory_router
 from analyze_routes import analyze_router
+from response_generation import tone_bleurt_gate, enhance_query_context, format_context_enhancement
 import time
 
 router = APIRouter()
@@ -364,6 +365,11 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
         logger.info(f"Original message: '{message['message']}'")
         logger.info(f"Processed query for Mem0: '{query_text}'")
         
+        # Extract insights from the user query using spaCy
+        logger.info("🔍 Extracting query insights with spaCy...")
+        query_insights = enhance_query_context(message["message"])
+        context_enhancement = format_context_enhancement(query_insights)
+        
         # Retrieve relevant memories with timeout to prevent blocking
         memories = await get_memories_with_timeout(user_id, query_text, limit=4, timeout=5.0)
         memories_with_scores = [(mem["memory"], mem.get("score", 0.0)) for mem in memories]
@@ -372,9 +378,13 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
         if not memories_with_scores or max(score for _, score in memories_with_scores) < 0.3:
             memories_with_scores = []  # Clear memories if they're not relevant enough
         
-        # Build persona context
+        # Build persona context with query insights
         persona_context_parts = []
-        persona_context = ""
+        if context_enhancement:
+            logger.info(f"📝 Adding query insights to context:\n{context_enhancement}")
+            persona_context_parts.append(f"QUERY ANALYSIS:\n{context_enhancement}")
+        
+        persona_context = "\n\n".join(persona_context_parts) if persona_context_parts else ""
         logger.info(f"Built persona context with {len(persona_context_parts)} sections")
         
         # Format conversation history
@@ -432,14 +442,28 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
                 stream=True
             )
             full_response = ""
+            chunks_buffer = []
+            
+            # Collect full response first for quality validation
             async for chunk in response:
                 content = chunk.choices[0].delta.content or ""
                 full_response += content
-                # Format as SSE with JSON data
-                yield f"data: {json.dumps({'choices': [{'delta': {'content': content}}]})}\n\n"
+                chunks_buffer.append(content)
                 
-                # When streaming is complete, add memories in background (non-blocking)
+                # When streaming is complete, validate and then stream
                 if chunk.choices[0].finish_reason == "stop":
+                    # Run quality gate (now non-blocking)
+                    passed_gate = tone_bleurt_gate(full_response)
+                    logger.info(f"Response tone gate: {'PASSED' if passed_gate else 'FAILED'}")
+                    
+                    # Stream the buffered response
+                    for buffered_content in chunks_buffer:
+                        yield f"data: {json.dumps({'choices': [{'delta': {'content': buffered_content}}]})}\n\n"
+                    
+                    # Add final stop token
+                    yield f"data: {json.dumps({'choices': [{'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
+                    
+                    # Store memories in background
                     background_tasks.add_task(store_memories_async, user_id, message['message'], full_response)
         
         return StreamingResponse(
