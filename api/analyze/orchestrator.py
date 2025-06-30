@@ -154,6 +154,7 @@ class AnalyzeOrchestrator:
             logger.info("Step 4: Evaluating responses...")
             session["status"] = "evaluating_responses"
             session["progress"]["current_step"] = "evaluating_responses"
+            session["progress"]["evaluation_progress"] = 0
             
             logger.info(f"=== Starting Response Evaluation (Transcript Test) ===")
             logger.info(f"Test results count: {len(test_results)}")
@@ -161,9 +162,25 @@ class AnalyzeOrchestrator:
             logger.info(f"Using BLEURT-only evaluation for transcript test")
             logger.info(f"No GPT-4 evaluation - pure BLEURT semantic similarity scoring")
             
+            # Check if BLEURT model needs loading and update status accordingly
+            if self.judge_ai_transcript.use_bleurt and not self.judge_ai_transcript.bleurt_scorer._model_loaded:
+                session["progress"]["current_step"] = "loading_bleurt"
+                logger.info("BLEURT model needs loading (this may take 1-2 minutes)...")
+                
+                # Gradual progress indication during model loading
+                for i in range(5):
+                    session["progress"]["evaluation_progress"] = (i + 1) / 5.0
+                    await asyncio.sleep(0.2)  # Allow status updates to be seen
+            
+            # Switch to evaluation step
+            session["progress"]["current_step"] = "evaluating_responses"
+            session["progress"]["evaluation_progress"] = 0
+            
+            # Run evaluation with progress updates
             evaluated_results = await self.judge_ai_transcript.batch_evaluate(test_results, qa_pairs)
             session["evaluated_results"] = evaluated_results
             session["progress"]["evaluations_completed"] = len(evaluated_results)
+            session["progress"]["evaluation_progress"] = 1.0  # Complete
             
             logger.info(f"Evaluation complete. Evaluated {len(evaluated_results)} results.")
             
@@ -198,10 +215,10 @@ class AnalyzeOrchestrator:
             session["aggregate_metrics"] = aggregate_metrics
             
             logger.info(f"=== Final Aggregate Metrics (BLEURT-Only) ===")
-            logger.info(f"Evaluation method: {aggregate_metrics.get('evaluation_method', 'unknown')}")
-            logger.info(f"Total evaluations: {aggregate_metrics.get('successful_responses', 0)}")
+            for key, value in aggregate_metrics.items():
+                logger.info(f"{key}: {value}")
             logger.info(f"Average BLEURT score: {aggregate_metrics.get('avg_bleurt_score', 0):.3f}")
-            logger.info(f"BLEURT pass rate: {aggregate_metrics.get('pass_rate', 0):.3f}")
+            logger.info(f"BLEURT pass rate (>= 0.0): {aggregate_metrics.get('pass_rate', 0):.3f}")
             logger.info(f"Score range: {aggregate_metrics.get('min_bleurt_score', 0):.3f} - {aggregate_metrics.get('max_bleurt_score', 0):.3f}")
             
             # Complete

@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class BLEURTScorer:
     """
     BLEURT scorer for evaluating text similarity using HuggingFace evaluate.
-    Handles negative scores appropriately by normalizing them.
+    Returns raw BLEURT scores without normalization (range typically -2 to +2).
     """
     
     def __init__(self):
@@ -56,7 +56,6 @@ class BLEURTScorer:
             try:
                 from sentence_transformers import SentenceTransformer
                 from sklearn.metrics.pairwise import cosine_similarity
-                import numpy as np
                 
                 self.scorer = SentenceTransformer('all-MiniLM-L6-v2')  # Small, fast model
                 self._use_sentence_transformer = True
@@ -69,14 +68,14 @@ class BLEURTScorer:
     
     def compute_score(self, reference: str, candidate: str) -> float:
         """
-        Compute BLEURT score between reference and candidate texts.
+        Compute raw BLEURT score between reference and candidate texts.
         
         Args:
             reference: The reference text (expected answer)
             candidate: The candidate text (bot response)
             
         Returns:
-            Normalized BLEURT score between 0 and 1
+            Raw BLEURT score (typically ranges from -2 to +2)
         """
         if not self._model_loaded:
             self._load_model()
@@ -91,30 +90,25 @@ class BLEURTScorer:
             )
             raw_score = result['scores'][0]
             
-            # Normalize score to 0-1 range
-            # BLEURT scores typically range from about -2 to +2
-            # We'll map this to 0-1 using a sigmoid-like transformation
-            normalized_score = self._normalize_score(raw_score)
+            logger.debug(f"BLEURT raw score: {raw_score:.3f}")
             
-            logger.debug(f"BLEURT raw score: {raw_score:.3f}, normalized: {normalized_score:.3f}")
-            
-            return normalized_score
+            return raw_score
             
         except Exception as e:
             logger.error(f"Error computing BLEURT score: {e}")
             # Return a default low score if computation fails
-            return 0.1
+            return -1.0
     
     def batch_compute_scores(self, references: List[str], candidates: List[str]) -> List[float]:
         """
-        Compute BLEURT scores for multiple reference-candidate pairs.
+        Compute raw BLEURT scores for multiple reference-candidate pairs.
         
         Args:
             references: List of reference texts
             candidates: List of candidate texts
             
         Returns:
-            List of normalized BLEURT scores
+            List of raw BLEURT scores (typically ranges from -2 to +2)
         """
         if not self._model_loaded:
             self._load_model()
@@ -132,67 +126,35 @@ class BLEURTScorer:
             )
             raw_scores = result['scores']
             
-            # Normalize all scores
-            normalized_scores = [self._normalize_score(score) for score in raw_scores]
-            
             logger.info(f"Computed BLEURT scores for {len(references)} pairs")
-            logger.debug(f"Score range: {min(normalized_scores):.3f} - {max(normalized_scores):.3f}")
+            logger.debug(f"Raw score range: {min(raw_scores):.3f} - {max(raw_scores):.3f}")
             
-            return normalized_scores
+            return raw_scores
             
         except Exception as e:
             logger.error(f"Error computing batch BLEURT scores: {e}")
             # Return default low scores if computation fails
-            return [0.1] * len(references)
+            return [-1.0] * len(references)
     
-    def _normalize_score(self, raw_score: float) -> float:
+    def get_score_interpretation(self, raw_score: float) -> str:
         """
-        Normalize BLEURT score to 0-1 range.
-        
-        BLEURT scores can be negative and typically range from about -2 to +2.
-        We use a modified sigmoid function to map them to [0, 1].
+        Get human-readable interpretation of the raw BLEURT score.
         
         Args:
-            raw_score: Raw BLEURT score
-            
-        Returns:
-            Normalized score between 0 and 1
-        """
-        # Use a modified sigmoid transformation
-        # This maps:
-        # - Scores around 0 to 0.5
-        # - Positive scores (good) to > 0.5
-        # - Negative scores (poor) to < 0.5
-        # - Very negative scores approach 0
-        # - Very positive scores approach 1
-        
-        # Sigmoid with adjusted parameters for BLEURT range
-        normalized = 1 / (1 + np.exp(-raw_score))
-        
-        # Ensure the score is in [0, 1] range
-        normalized = max(0.0, min(1.0, normalized))
-        
-        return normalized
-    
-    def get_score_interpretation(self, normalized_score: float) -> str:
-        """
-        Get human-readable interpretation of the BLEURT score.
-        
-        Args:
-            normalized_score: Normalized BLEURT score (0-1)
+            raw_score: Raw BLEURT score (typically -2 to +2)
             
         Returns:
             Human-readable interpretation
         """
-        if normalized_score >= 0.8:
+        if raw_score >= 1.0:
             return "Excellent semantic similarity"
-        elif normalized_score >= 0.7:
+        elif raw_score >= 0.5:
             return "Good semantic similarity"
-        elif normalized_score >= 0.6:
+        elif raw_score >= 0.0:
             return "Moderate semantic similarity"
-        elif normalized_score >= 0.4:
+        elif raw_score >= -0.5:
             return "Fair semantic similarity"
-        elif normalized_score >= 0.2:
+        elif raw_score >= -1.0:
             return "Poor semantic similarity"
         else:
             return "Very poor semantic similarity"
