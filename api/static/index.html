@@ -563,7 +563,7 @@
 
         function startDebugPolling() {
             if (!debugPollingInterval) {
-                debugPollingInterval = setInterval(refreshDebugInfo, 5000);
+                debugPollingInterval = setInterval(refreshDebugInfo, 30000);  // 30 seconds instead of 5
             }
         }
         

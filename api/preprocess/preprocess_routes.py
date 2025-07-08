@@ -90,14 +90,15 @@ async def analyze_input(user_input: dict):
             memory_query = analysis_data.get("memory_query", "")
             
             # Extract row selection from collapsed_map_row
-            collapsed_map_row = analysis_data.get("collapsed_map_row", "Row 1")
-            # Extract row number from the collapsed_map_row string (e.g., "Row 1" -> 1)
+            collapsed_map_row = analysis_data.get("collapsed_map_row", "1 · Standard Question")
+            # Extract row number from the collapsed_map_row string (e.g., "10 · External Tech Critique" -> 10)
             import re
-            row_match = re.search(r'Row (\d+)', collapsed_map_row)
+            row_match = re.search(r'^(\d+)', collapsed_map_row)
             row_number = int(row_match.group(1)) if row_match else 1
             
             logger.info(f"Extracted search_query: '{search_query}'")
             logger.info(f"Extracted memory_query: '{memory_query}'")
+            logger.info(f"Extracted collapsed_map_row: '{collapsed_map_row}'")
             logger.info(f"Extracted row_number: {row_number}")
             
             # Store user persona data for conversation tracking
@@ -190,6 +191,7 @@ async def analyze_input(user_input: dict):
             "search_query": search_query,
             "memory_query": memory_query,
             "row_number": row_number,
+            "selected_row": row_number,  # For consistency with other endpoints
             "memory_results": memory_results,
             "serper_results": serper_results,
             "conversation_history": conversation_history,
