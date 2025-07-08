@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any, List
 from config import openai_client, static_path, logger
 from analyze.orchestrator import AnalyzeOrchestrator
 import time
+from utils.utils import add_memory
 
 # Initialize the analyze router
 analyze_router = APIRouter(prefix="/analyze")
@@ -66,7 +67,6 @@ def create_gavin_bot_handler():
         try:
             # Import here to avoid circular imports
             from routes import get_memories_with_timeout, preprocess_tweet
-            from utils import add_memory
             from config import mem0_client
             
             user_id = f"gavinwood"

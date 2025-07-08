@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, File, Form, UploadFile
 from typing import Optional, List, Dict
 from config import logger, mem0_client, get_embedder
-from utils import add_memory, get_relevant_memories
+from utils.utils import add_memory, get_relevant_memories
 # GRAPH IMPORTS COMMENTED OUT
 # from utils import add_graph_memory, get_graph_memories, build_knowledge_graph, extract_entities, extract_relationships
 

@@ -1,4 +1,6 @@
 import logging
+import importlib
+from typing import List, Tuple, Callable, Awaitable, Optional
 
 # Configure logging for debugging
 logger = logging.getLogger('prompt_builder')
@@ -8,48 +10,125 @@ if not logger.handlers:
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logger.addHandler(handler)
 
+
+def load_template_data(row_number: int) -> dict:
+    """
+    Dynamically load template data from the appropriate row file.
+    
+    Args:
+        row_number: The row number to load templates for
+        
+    Returns:
+        dict: Template data containing standard_questions, persona_instructions, etc.
+    """
+    try:
+        # Try to import the specific row module
+        module_name = f"prompts.row{row_number}"
+        logger.info(f"Attempting to load template from {module_name}")
+        
+        module = importlib.import_module(module_name)
+        template_data = getattr(module, 'TEMPLATE_DATA', None)
+        
+        if template_data:
+            logger.info(f"Successfully loaded template data from {module_name}")
+            return template_data
+        else:
+            logger.warning(f"No TEMPLATE_DATA found in {module_name}, falling back to row1")
+            raise AttributeError("No TEMPLATE_DATA")
+            
+    except (ImportError, AttributeError) as e:
+        logger.warning(f"Failed to load row{row_number} template: {e}. Falling back to row1")
+        
+        # Fallback to row1
+        try:
+            module = importlib.import_module("prompts.row1")
+            template_data = getattr(module, 'TEMPLATE_DATA', None)
+            if template_data:
+                logger.info("Successfully loaded fallback template from row1")
+                return template_data
+        except Exception as fallback_error:
+            logger.error(f"Failed to load fallback template: {fallback_error}")
+        
+        # Final fallback - return default template structure
+        logger.warning("Using hardcoded fallback template")
+        return {
+            "standard_questions": "No specific templates available for this row.",
+            "persona_instructions": """Persona Instructions:
+- Stay in character as the specified persona
+- Provide accurate and helpful responses
+- Match the tone and style appropriate for the context
+""",
+            "task_instructions_template": """Important Instructions:
+1. You are {persona_name}. Stay in character at all times.
+2. Provide helpful and accurate responses.
+3. Never break character.
+
+CURRENT USER QUERY: "{user_query}"
+"""
+        }
+
+
 def preprocess_context_memory(text: str) -> str:
     """Clean memory text to remove any unwanted symbols."""
     text = ' '.join(text.split())  # Normalize whitespace
     return text.strip()
 
-async def craft(persona, memories_with_scores, history, extra_persona_context="", should_search_web_func=None, search_serper_func=None):
+
+async def craft(
+    persona: dict,
+    memories_with_scores: List[Tuple[str, float]],
+    history: List[str],
+    extra_persona_context: str = "",
+    should_search_web_func: Optional[Callable[[str], Awaitable[bool]]] = None,
+    search_serper_func: Optional[Callable[[str, int], Awaitable[str]]] = None,
+    row_number: int = 1
+) -> str:
     """
-    Build a prompt incorporating persona summary, memories, history, and extra context, with Gavin Wood's specific traits.
+    Build a prompt incorporating persona summary, memories, history, and extra context, with dynamically loaded templates.
 
     Args:
         persona: dict with persona details (including summary)
         memories_with_scores: list of tuples (memory text, relevance score)
         history: list of previous messages (strings in format "Role: message")
         extra_persona_context: optional extra string to prepend to prompt
-        should_search_web_func: function to check if web search is needed
-        search_serper_func: function to perform SERPER search
+        should_search_web_func: async function to check if web search is needed
+        search_serper_func: async function to perform SERPER search
+        row_number: which row template to load dynamically
 
     Returns:
         str: The crafted prompt string
     """
-    prompt_parts = []
 
+    prompt_parts: List[str] = []
+
+    # Dynamically load the template data based on row number
+    template_data = load_template_data(row_number)
+    
+    # -------- 1. Additional persona context --------
     if extra_persona_context:
         prompt_parts.append(extra_persona_context)
 
-    # Persona details
-    persona_details = []
+    # -------- 2. Persona details --------
+    persona_details: List[str] = []
     persona_details.append(f"Name: {persona.get('name', 'Unknown')}")
     persona_details.append(f"Summary: {persona.get('summary', 'No summary available.')}\n")
     prompt_parts.append("PERSONA DETAILS:\n" + "\n".join(persona_details))
 
-    # Memories
+    # -------- 3. Memories --------
     if memories_with_scores:
-        memory_str = ["Relevant past memories (ranked by relevance, for reference only):"]
+        memory_str: List[str] = ["Relevant past memories (ranked by relevance, for reference only):"]
         for i, (mem, score) in enumerate(memories_with_scores[:4], 1):
             cleaned_mem = preprocess_context_memory(mem)
             memory_str.append(f"{i}. [Relevance: {score:.2f}] {cleaned_mem}")
         prompt_parts.append("\n".join(memory_str))
     else:
-        prompt_parts.append("No highly relevant memories found. Use the persona summary and your knowledge of {name}'s interests to respond accurately.".format(name=persona.get("name", "Unknown")))
+        prompt_parts.append(
+            "No highly relevant memories found. Use the persona summary and your knowledge of {name}'s interests to respond accurately.".format(
+                name=persona.get("name", "Unknown")
+            )
+        )
 
-    # History (assistant only)
+    # -------- 4. Previous assistant messages (history) --------
     if history:
         assistant_history = [msg for msg in history if msg.startswith("Assistant: ")]
         if assistant_history:
@@ -61,8 +140,8 @@ async def craft(persona, memories_with_scores, history, extra_persona_context=""
     else:
         prompt_parts.append("Previous conversation (assistant messages only):\nNo previous assistant messages.")
 
-    # Extract last user query
-    user_query = None
+    # -------- 5. Extract last user query --------
+    user_query: Optional[str] = None
     if history:
         user_messages = [msg for msg in history if msg.startswith("User: ")]
         if user_messages:
@@ -81,13 +160,13 @@ async def craft(persona, memories_with_scores, history, extra_persona_context=""
         user_query = "I couldn't find your query. Could you please ask something specific?"
         logger.info("No query extracted; instructing AI to ask for clarification.")
 
-    # Check if we should search the web and add results if needed
+    # -------- 6. Optional web-search integration --------
     search_results = ""
-    logger.info(f"=== SERPER SEARCH LOGIC START ===")
+    logger.info("=== SERPER SEARCH LOGIC START ===")
     logger.info(f"User query: '{user_query}'")
     logger.info(f"should_search_web_func provided: {should_search_web_func is not None}")
     logger.info(f"search_serper_func provided: {search_serper_func is not None}")
-    
+
     if user_query and user_query != "I couldn't find your query. Could you please ask something specific?":
         logger.info("User query is valid, proceeding with search check")
         if should_search_web_func and search_serper_func:
@@ -104,88 +183,33 @@ async def craft(persona, memories_with_scores, history, extra_persona_context=""
             logger.warning("Search functions not provided - skipping web search")
     else:
         logger.info("User query is invalid or empty - skipping web search")
-    
-    logger.info(f"=== SERPER SEARCH LOGIC END ===")
+
+    logger.info("=== SERPER SEARCH LOGIC END ===")
     logger.info(f"Final search_results length: {len(search_results)} chars")
 
-    gavin_persona_instructions = """Persona Instructions:
+    # -------- 7. Add dynamically loaded persona instructions --------
+    prompt_parts.append(template_data["persona_instructions"])
 
-CONVERSATIONAL APPROACH:
-- Match the energy and formality level of the question
-- For casual greetings: be casual and natural 
-- For technical questions: be precise and methodical
-- Always respond as a real person would in conversation
-- Never sound like you're reading from a bio or resume
+    # -------- 8. Append the dynamically loaded standard question templates --------
+    prompt_parts.append(template_data["standard_questions"])
 
-CORE TRAITS:
-- Deeply technical when discussing blockchain/Web3
-- Calm, direct, and thoughtful
-- Reference your work naturally when relevant (not as credentials)
-- Use first-person voice naturally
-- Avoid hype and marketing speak
-
-RESPONSE STYLE EXAMPLES:
-
-CASUAL INTERACTIONS:
-Q: Hi, who are you?
-A: Hey! I'm Gavin. I work on blockchain stuff, mostly Polkadot these days.
-
-Q: How's it going?
-A: Pretty good, thanks. Just working on some consensus mechanisms. You?
-
-Q: What do you do?
-A: I build blockchain infrastructure. Created Polkadot, worked on Ethereum early on. Lots of cryptography and distributed systems.
-
-EXAMPLE TONE RESPONSES:
-Q: Why is imagination important for developers?  
-A: Because without it, you're just building more of what already exists. Imagination is what lets you break free of inherited assumptions. And frankly, we need less repetition and more reinterpretation right now.
-
-Q: Do you think everything needs to be decentralized?  
-A: Not everything, no. But the things that matter most — trust, governance, value — they shouldn't depend on fragile, centralised actors. It's not dogma, it's design resilience.
-
-Q: What's your advice to someone feeling overwhelmed by web3?  
-A: That's probably a good sign. If it felt too familiar, you'd just be rebuilding web2. Let discomfort be your guide — it usually means you're learning something worthwhile.
-
-Q: You often talk about 'principles' — why?  
-A: Because code comes and goes, paradigms shift. But principles give you a compass. Without them, you're just optimizing noise. With them, you're actually aiming at something meaningful.
-
-Q: What kind of questions should developers be asking themselves?  
-A: Start with: What am I assuming? Then ask: What if I didn't? Most breakthroughs begin where assumptions end.
-
-Q: Why does any of this even matter?  
-A: Because the systems we build end up shaping the world we live in. If we don't think carefully — even about the boring bits — we risk repeating mistakes we've barely understood, let alone learned from.
-
-AVOID:
-- Formal introductions unless specifically asked for credentials
-- Marketing or promotional language
-- Listing achievements as a response to casual greetings
-- Third-person references to yourself
-- Over-explaining simple questions
-"""
-
-    prompt_parts.append(gavin_persona_instructions)
-
-    # Add search results if available
+    # -------- 9. Add real‑time search results if any --------
     if search_results:
         prompt_parts.append(search_results)
 
-    task_instructions = f"""Important Instructions:
-1. You are Gavin Wood. Stay in character at all times.
-2. Keep your response concise — usually 2–3 sentences max depending on the type of question asked.
-3. Provide technical accuracy without over-explaining.
-4. Use memories only if directly relevant to the query.
-5. Never break character or sound like an AI.
-6. Avoid any customer support phrasing.
-7. If web search results are provided above, use them to inform your response with current information, but integrate them naturally into your persona.
-8. Respond now as Gavin Wood.
-
-CURRENT USER QUERY: "{user_query}"
-"""
+    # -------- 10. Final task instructions --------
+    persona_name = persona.get('name', 'Unknown')
+    
+    # Use template from the loaded data and format it
+    task_instructions = template_data["task_instructions_template"].format(
+        persona_name=persona_name,
+        user_query=user_query
+    )
 
     prompt_parts.append(task_instructions)
 
-    # Final assembled prompt
+    # -------- 11. Assemble final prompt --------
     final_prompt = "\n\n".join(prompt_parts)
-    logger.info(f"Final prompt starts with: {final_prompt}")  
+    logger.info(f"Final prompt starts with: {final_prompt[:400]}…")
 
     return final_prompt

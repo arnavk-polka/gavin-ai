@@ -361,6 +361,45 @@
             box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
         }
 
+        /* Preprocessing Panel Styles */
+        .preprocessing-info {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .preprocessing-section {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 16px;
+            background: #ffffff;
+        }
+
+        .preprocessing-section h4 {
+            margin: 0 0 12px 0;
+            color: #2c3e50;
+            font-size: 14px;
+            font-weight: 600;
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 8px;
+        }
+
+        .preprocessing-section pre {
+            margin: 0;
+            max-height: 300px;
+            font-size: 11px;
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            line-height: 1.4;
+            color: #495057;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
         @media (max-width: 768px) {
             #main-container {
                 padding: 16px;
@@ -425,12 +464,27 @@
             <div id="debug-panel">
                 <div class="tabs">
                     <div class="tab active" onclick="showTab('prompt-tab')">Prompt</div>
+                    <div class="tab" onclick="showTab('preprocessing-tab')">Preprocessing</div>
                     <div class="tab" onclick="showTab('raw-tab')">Raw Debug</div>
                 </div>
                 
                 <div id="prompt-tab" class="tab-content active">
                     <h3>Current Prompt</h3>
                     <pre id="prompt-content">No prompt generated yet.</pre>
+                </div>
+                
+                <div id="preprocessing-tab" class="tab-content">
+                    <h3>Preprocessing OpenAI Response</h3>
+                    <div class="preprocessing-info">
+                        <div class="preprocessing-section">
+                            <h4>Selected Row & Analysis</h4>
+                            <pre id="preprocessing-analysis">No preprocessing data available</pre>
+                        </div>
+                        <div class="preprocessing-section">
+                            <h4>Raw OpenAI Response</h4>
+                            <pre id="preprocessing-raw">No raw response available</pre>
+                        </div>
+                    </div>
                 </div>
                 
                 <div id="raw-tab" class="tab-content">
@@ -451,6 +505,8 @@
         const debugSection = document.getElementById('debug-section');
         const promptContent = document.getElementById('prompt-content');
         const rawDebug = document.getElementById('raw-debug');
+        const preprocessingAnalysis = document.getElementById('preprocessing-analysis');
+        const preprocessingRaw = document.getElementById('preprocessing-raw');
         let history = [];
         let debugData = {};
         let debugPollingInterval;
@@ -499,7 +555,7 @@
             
             // Activate the clicked tab
             const tabs = Array.from(document.querySelectorAll('.tab'));
-            const tabIndex = ['prompt-tab', 'raw-tab'].indexOf(tabId);
+            const tabIndex = ['prompt-tab', 'preprocessing-tab', 'raw-tab'].indexOf(tabId);
             if (tabIndex >= 0 && tabIndex < tabs.length) {
                 tabs[tabIndex].classList.add('active');
             }
@@ -528,6 +584,27 @@
                         // Update prompt tab
                         promptContent.textContent = data.last_prompt || "No prompt generated yet.";
                         
+                        // Update preprocessing tab
+                        if (data.preprocessing_response) {
+                            const analysisData = {
+                                "selected_row": data.preprocessing_response.row_number || "Unknown",
+                                "collapsed_map_row": data.preprocessing_response.analysis_data?.collapsed_map_row || "Unknown", 
+                                "search_query": data.preprocessing_response.search_query || "",
+                                "memory_query": data.preprocessing_response.memory_query || "",
+                                "user_persona": data.preprocessing_response.analysis_data?.user_persona || {},
+                                "intent_main": data.preprocessing_response.analysis_data?.intent_main || "",
+                                "sentiment_main": data.preprocessing_response.analysis_data?.sentiment_main || "",
+                                "emotion": data.preprocessing_response.analysis_data?.emotion || "",
+                                "tone": data.preprocessing_response.analysis_data?.tone || ""
+                            };
+                            
+                            preprocessingAnalysis.textContent = JSON.stringify(analysisData, null, 2);
+                            preprocessingRaw.textContent = data.preprocessing_response.raw_openai_response || "No raw OpenAI response available";
+                        } else {
+                            preprocessingAnalysis.textContent = "No preprocessing data available yet";
+                            preprocessingRaw.textContent = "No raw OpenAI response available yet";
+                        }
+                        
                         // Update raw tab with formatted JSON
                         const formattedJson = JSON.stringify(data, null, 2);
                         rawDebug.textContent = formattedJson;
@@ -535,6 +612,8 @@
                     .catch(error => {
                         console.error('Error fetching debug info:', error);
                         rawDebug.textContent = 'Error fetching debug data';
+                        preprocessingAnalysis.textContent = 'Error fetching preprocessing data';
+                        preprocessingRaw.textContent = 'Error fetching preprocessing data';
                     });
             } catch (error) {
                 console.error('Error in refreshDebugInfo:', error);
@@ -619,6 +698,8 @@
                                     const lastMessage = chatContainer.lastElementChild;
                                     if (lastMessage && lastMessage.classList.contains('ai-message')) {
                                         lastMessage.textContent = aiResponse;
+                                        // Auto-scroll during streaming
+                                        chatContainer.scrollTop = chatContainer.scrollHeight;
                                     } else if (!errorOccurred) {
                                         addMessage(aiResponse, false);
                                     }
@@ -634,6 +715,8 @@
                                     const lastMessage = chatContainer.lastElementChild;
                                     if (lastMessage && lastMessage.classList.contains('ai-message')) {
                                         lastMessage.textContent = aiResponse;
+                                        // Auto-scroll during streaming
+                                        chatContainer.scrollTop = chatContainer.scrollHeight;
                                     } else {
                                         addMessage(`Raw response: ${rawResponse}`, false);
                                     }

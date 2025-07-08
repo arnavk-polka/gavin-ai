@@ -206,7 +206,7 @@ async def seed_memories():
         # Wait for model to be ready first
         await ensure_model_ready()
         # Import locally to avoid circular import
-        from utils import add_memory
+        from utils.utils import add_memory
         
         logger.info("Starting memory seeding...")
         success_count = 0
