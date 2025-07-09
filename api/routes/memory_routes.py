@@ -1,6 +1,6 @@
 import json
 import asyncio
-from fastapi import APIRouter, HTTPException, File, Form, UploadFile
+from fastapi import APIRouter, HTTPException, File, Form, UploadFile, Request
 from typing import Optional, List, Dict
 from config import logger, mem0_client, get_embedder
 from utils.utils import add_memory, get_relevant_memories
@@ -299,6 +299,179 @@ async def upload_document_endpoint(
     except Exception as e:
         logger.error(f"Error in upload_document endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@memory_router.post("/upload-docs")
+async def upload_multiple_documents_endpoint(
+    request: Request,
+    user_id: str = Form("gavinwood"),
+    doc_type: str = Form("document"),
+    metadata: str = Form("{}")
+):
+    """Upload and process multiple documents into memories.
+    
+    Accepts multiple files in two ways:
+    1. Single file input with multiple files: <input type="file" name="files" multiple>
+    2. Multiple file inputs: multiple fields named "files"
+    
+    Parameters:
+    - files: Multiple document files (PDF, TXT, etc.)
+    - user_id: User ID (defaults to gavinwood)
+    - doc_type: Type of document (defaults to "document") 
+    - metadata: JSON string of additional metadata
+    """
+    try:
+        # Get the raw form data to handle flexible file patterns
+        form_data = await request.form()
+        
+        # Extract all uploaded files from the 'files' field
+        uploaded_files = []
+        
+        if "files" in form_data:
+            files_field = form_data.getlist("files")
+            for file_item in files_field:
+                if hasattr(file_item, 'filename') and file_item.filename:
+                    uploaded_files.append(file_item)
+        
+        if not uploaded_files:
+            raise HTTPException(status_code=400, detail="No files provided. Use 'files' field for multiple file upload.")
+        
+        # Check file count limit
+        MAX_FILES = 50  # Adjust based on your server capacity
+        if len(uploaded_files) > MAX_FILES:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Too many files. Maximum {MAX_FILES} files allowed, got {len(uploaded_files)}"
+            )
+        
+        # Parse metadata
+        try:
+            metadata_dict = json.loads(metadata)
+        except:
+            metadata_dict = {}
+        
+        total_memories_added = 0
+        processed_files = []
+        
+        for file_index, file in enumerate(uploaded_files):
+            try:
+                # Check individual file size (10MB limit)
+                MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+                if hasattr(file, 'size') and file.size > MAX_FILE_SIZE:
+                    logger.warning(f"File {file.filename} too large: {file.size} bytes")
+                    processed_files.append({
+                        "filename": file.filename,
+                        "status": "error",
+                        "error": f"File too large. Maximum {MAX_FILE_SIZE // (1024*1024)}MB allowed"
+                    })
+                    continue
+                
+                # Read file content
+                content = await file.read()
+                
+                # Double-check size after reading
+                if len(content) > MAX_FILE_SIZE:
+                    logger.warning(f"File {file.filename} content too large: {len(content)} bytes")
+                    processed_files.append({
+                        "filename": file.filename,
+                        "status": "error", 
+                        "error": f"File content too large. Maximum {MAX_FILE_SIZE // (1024*1024)}MB allowed"
+                    })
+                    continue
+                
+                # Add file info to metadata
+                file_metadata = metadata_dict.copy()
+                file_metadata.update({
+                    "filename": file.filename,
+                    "content_type": file.content_type,
+                    "doc_type": doc_type,
+                    "upload_type": "document",
+                    "file_index": file_index,
+                    "total_files": len(uploaded_files)
+                })
+                
+                # Process based on file type
+                if file.content_type == "text/plain" or file.filename.endswith('.txt'):
+                    text_content = content.decode('utf-8')
+                elif file.content_type == "application/pdf" or file.filename.endswith('.pdf'):
+                    # For PDF, we'd need a PDF parser - for now just handle as text
+                    try:
+                        text_content = content.decode('utf-8')
+                    except:
+                        logger.warning(f"Could not process PDF file: {file.filename}")
+                        continue
+                else:
+                    try:
+                        text_content = content.decode('utf-8')
+                    except:
+                        logger.warning(f"Could not process file: {file.filename}")
+                        continue
+                
+                # Split content into chunks (simple sentence-based splitting)
+                chunks = []
+                sentences = text_content.split('. ')
+                
+                current_chunk = ""
+                for sentence in sentences:
+                    if len(current_chunk + sentence) < 500:  # Keep chunks under 500 chars
+                        current_chunk += sentence + ". "
+                    else:
+                        if current_chunk:
+                            chunks.append(current_chunk.strip())
+                        current_chunk = sentence + ". "
+                
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                
+                # Add each chunk as a memory
+                file_memories_added = 0
+                for i, chunk in enumerate(chunks):
+                    if chunk.strip():
+                        chunk_metadata = file_metadata.copy()
+                        chunk_metadata.update({
+                            "chunk_index": i,
+                            "total_chunks": len(chunks)
+                        })
+                        
+                        success = await asyncio.to_thread(
+                            add_memory, 
+                            mem0_client, 
+                            user_id, 
+                            f"Assistant: Document content from {file.filename}: {chunk}", 
+                            chunk_metadata
+                        )
+                        
+                        if success:
+                            file_memories_added += 1
+                            total_memories_added += 1
+                
+                processed_files.append({
+                    "filename": file.filename,
+                    "chunks_processed": len(chunks),
+                    "memories_added": file_memories_added,
+                    "status": "success"
+                })
+                
+            except Exception as file_error:
+                logger.error(f"Error processing file {file.filename}: {file_error}")
+                processed_files.append({
+                    "filename": file.filename,
+                    "status": "error",
+                    "error": str(file_error)
+                })
+        
+        return {
+            "status": "success",
+            "message": f"Processed {len(uploaded_files)} files and added {total_memories_added} memories",
+            "user_id": user_id,
+            "total_files": len(uploaded_files),
+            "total_memories_added": total_memories_added,
+            "processed_files": processed_files
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in upload_multiple_documents endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @memory_router.get("/list/{user_id}")
 async def list_memories_endpoint(user_id: str = "gavinwood", limit: int = 10):

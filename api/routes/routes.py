@@ -12,6 +12,7 @@ from utils.utils import preprocess_tweet, add_memory, get_relevant_memories
 from prompt_builder import craft
 from .memory_routes import memory_router
 from .analyze_routes import analyze_router
+from .logs_routes import logs_router
 from preprocess.preprocess_routes import deep_debug_router
 from response_generation import tone_bleurt_gate, enhance_query_context, format_context_enhancement
 import time
@@ -84,10 +85,32 @@ async def health_check():
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unhealthy")
 
+async def save_conversation_to_db(handle: str, user_message: str, assistant_response: str, 
+                                 row_number: int, memories_with_scores: list, serper_results: str, 
+                                 processing_time: float, session_id: str):
+    """Background task to save conversation to database."""
+    try:
+        from database import save_conversation
+        await save_conversation(
+            handle=handle,
+            user_message=user_message,
+            assistant_response=assistant_response,
+            session_id=session_id,
+            row_number=row_number,
+            memories_used=[{"memory": mem[0], "score": mem[1]} for mem in memories_with_scores],
+            serper_results=serper_results,
+            processing_time=processing_time,
+            metadata={"user_agent": "API", "source": "chat_endpoint"}
+        )
+        logger.info(f"Successfully saved conversation to database for handle: {handle}, session: {session_id}")
+    except Exception as e:
+        logger.error(f"Failed to save conversation to database: {e}")
+
 @router.post("/chat/{handle}")
 async def chat(handle: str, message: dict, request: Request, background_tasks: BackgroundTasks):
     """Chat endpoint that returns a streaming response."""
     logger.info(f"Chat request for handle: {handle}, message: {message.get('message', '')[:50]}...")
+    start_time = time.time()
     try:
         client_host = request.client.host
         user_agent = request.headers.get("user-agent", "")
@@ -95,11 +118,48 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
         
         user_message = message["message"]
         
+        # Generate session ID for multi-turn conversation tracking
+        import hashlib
+        import uuid
+        
+        # Check if session_id is provided in the message (client maintaining session)
+        session_id = message.get("session_id")
+        
+        if session_id:
+            # Use provided session ID from client
+            logger.info(f"Using provided session_id: {session_id} for handle: {handle}")
+        else:
+            # Generate new session ID for new conversations
+            history = message.get("history", [])
+            if history and len(history) > 0:
+                # For conversations with history but no session_id, try to maintain consistency
+                # Use a stable hash based on the first message if available
+                first_message = ""
+                if isinstance(history[0], dict) and "content" in history[0]:
+                    first_message = history[0]["content"]
+                elif isinstance(history[0], str):
+                    first_message = history[0]
+                
+                if first_message:
+                    # Create consistent session ID based on first message + handle
+                    consistent_hash = hashlib.md5(f"{handle}_{first_message[:100]}".encode()).hexdigest()[:12]
+                    session_id = f"{handle}_{consistent_hash}"
+                else:
+                    # Fallback to UUID for edge cases
+                    session_id = f"{handle}_{uuid.uuid4().hex[:12]}"
+            else:
+                # Completely new conversation - generate new session ID
+                session_id = f"{handle}_{uuid.uuid4().hex[:12]}"
+            
+            logger.info(f"Generated new session_id: {session_id} for handle: {handle}")
+        
+        logger.info(f"Using session_id: {session_id} for handle: {handle}")
+        
         # Step 1: Analyze user query to determine which row prompt to use
         logger.info("=== STEP 1: ANALYZING USER QUERY FOR PROMPT SELECTION ===")
         try:
             from preprocess.preprocess_routes import analyze_input
-            analysis_response = await analyze_input({"message": user_message})
+            analysis_response = await analyze_input({"message": user_message}, background_tasks)
             
             # Extract analysis data from JSONResponse
             if hasattr(analysis_response, 'body'):
@@ -292,11 +352,24 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
                         "timestamp": time.time()
                     }, indent=2)
                     
-                    # Add final stop token
-                    yield f"data: {json.dumps({'choices': [{'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
+                    # Add final stop token with session_id for client to maintain session
+                    yield f"data: {json.dumps({'choices': [{'delta': {}, 'finish_reason': 'stop'}], 'session_id': session_id, 'metadata': {'session_id': session_id, 'handle': handle}})}\n\n"
                     
                     # Store memories in background
                     background_tasks.add_task(store_memories_async, user_id, user_message, full_response)
+                    
+                    # Store conversation to database in background
+                    background_tasks.add_task(
+                        save_conversation_to_db, 
+                        handle, 
+                        user_message, 
+                        full_response, 
+                        row_number, 
+                        memories_with_scores, 
+                        analysis_serper, 
+                        time.time() - start_time,
+                        session_id
+                    )
 
         return StreamingResponse(
             response_stream(),
@@ -636,4 +709,5 @@ async def test_network_connectivity():
 app.include_router(router)
 app.include_router(memory_router)
 app.include_router(analyze_router)
+app.include_router(logs_router)
 app.include_router(deep_debug_router)

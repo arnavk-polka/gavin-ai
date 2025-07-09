@@ -21,6 +21,7 @@ COPY requirements.txt .
 RUN pip install --retries 3 -r requirements.txt
 
 RUN pip install  "tf-keras"
+RUN pip install  "asyncpg"
 # Install BLEURT with timeout handling (cached layer)
 RUN pip install --timeout 1000 --retries 3 git+https://github.com/google-research/bleurt.git || echo "BLEURT install failed, continuing without it"
 

@@ -2,7 +2,8 @@ import json
 import os
 import traceback
 import asyncio
-from fastapi import APIRouter, HTTPException
+import time
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from openai import AsyncOpenAI
 from config import logger, openai_client, mem0_client
@@ -17,12 +18,33 @@ deep_debug_router = APIRouter()
 conversation_history = []
 user_persona_history = []
 
+async def save_preprocessing_to_db(user_message: str, row_number: int, analysis_data: dict, 
+                                  search_query: str, memory_query: str, raw_openai_response: str, 
+                                  processing_time: float):
+    """Background task to save preprocessing prompt to database."""
+    try:
+        from database import save_preprocessing_prompt
+        await save_preprocessing_prompt(
+            user_message=user_message,
+            row_number=row_number,
+            analysis_data=analysis_data,
+            search_query=search_query,
+            memory_query=memory_query,
+            raw_openai_response=raw_openai_response,
+            processing_time=processing_time,
+            metadata={"source": "deepdebug_preprocessing"}
+        )
+        logger.info(f"Successfully saved preprocessing prompt to database")
+    except Exception as e:
+        logger.error(f"Failed to save preprocessing prompt to database: {e}")
+
 @deep_debug_router.post("/deepdebug/analyze")
-async def analyze_input(user_input: dict):
+async def analyze_input(user_input: dict, background_tasks: BackgroundTasks = None):
     """Send user input to OpenAI for deep debug analysis, then use results for searches."""
     global conversation_history, user_persona_history
     
     try:
+        start_time = time.time()
         user_message = user_input.get("message", "")
         if not user_message:
             raise HTTPException(status_code=400, detail="No message provided")
@@ -182,6 +204,19 @@ async def analyze_input(user_input: dict):
         # Keep only last 10 messages to prevent history from growing too large
         if len(conversation_history) > 10:
             conversation_history = conversation_history[-10:]
+        
+        # Save preprocessing data to database in background
+        if background_tasks:
+            background_tasks.add_task(
+                save_preprocessing_to_db,
+                user_message,
+                row_number,
+                analysis_data,
+                search_query,
+                memory_query,
+                analysis_result,  # raw OpenAI response
+                time.time() - start_time
+            )
         
         # Return just the analysis data without generating response
         return JSONResponse({
