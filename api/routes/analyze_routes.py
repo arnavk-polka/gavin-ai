@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any, List
 from config import openai_client, static_path, logger
 from analyze.orchestrator import AnalyzeOrchestrator
 import time
+from utils.utils import add_memory
 
 # Initialize the analyze router
 analyze_router = APIRouter(prefix="/analyze")
@@ -66,7 +67,6 @@ def create_gavin_bot_handler():
         try:
             # Import here to avoid circular imports
             from routes import get_memories_with_timeout, preprocess_tweet
-            from utils import add_memory
             from config import mem0_client
             
             user_id = f"gavinwood"
@@ -91,13 +91,33 @@ def create_gavin_bot_handler():
             # Format conversation history (simplified for stress test)
             conversation_history = ""
             
+            # Determine row number (you can implement your logic here)
+            # For now, let's get it from preprocessing or use a dynamic method
+            try:
+                from preprocess.preprocess_routes import analyze_input
+                analysis_response = await analyze_input({"message": message['message']})
+                
+                # Extract row number from analysis
+                if hasattr(analysis_response, 'body'):
+                    import json
+                    analysis_json = json.loads(analysis_response.body.decode())
+                    row_number = analysis_json.get("row_number", 1)
+                else:
+                    row_number = analysis_response.get("row_number", 1)
+            except Exception as e:
+                logger.warning(f"Failed to get row number from preprocessing: {e}")
+                row_number = 1
+            
+            logger.info(f"Using row {row_number} for analyze prompt")
+            
             # Create the prompt
             from prompt_builder import craft
             prompt = await craft(
                 persona=persona,
                 memories_with_scores=memories_with_scores,
                 history=[f"User: {message['message']}"],
-                extra_persona_context=persona_context
+                extra_persona_context=persona_context,
+                row_number=row_number
             )
             
             # Get response using non-streaming method

@@ -1,7 +1,7 @@
 import os
 import uvicorn
 from config import app, logger
-import routes
+from routes import routes  # Import from routes folder
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
