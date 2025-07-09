@@ -282,8 +282,15 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
                 return analysis_serper
             return await search_serper(query, num_results)
         
+        # Step 3: Select template based on analysis data
+        from prompt_builder import select_template_based_on_analysis
+        template_number = None
+        if 'analysis_json' in locals() and analysis_json.get('analysis_data'):
+            template_number = select_template_based_on_analysis(analysis_json['analysis_data'], row_number)
+            logger.info(f"Selected template {template_number} for row {row_number} based on analysis")
+        
         # Build the prompt using the selected row's prompt builder
-        logger.info(f"=== STEP 3: BUILDING PROMPT WITH ROW {row_number} ===")
+        logger.info(f"=== STEP 3: BUILDING PROMPT WITH ROW {row_number}, TEMPLATE {template_number} ===")
         prompt = await row_craft(
             persona, 
             memories_with_scores, 
@@ -291,12 +298,13 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
             extra_persona_context=persona_context, 
             should_search_web_func=should_search_web_enhanced, 
             search_serper_func=search_serper_enhanced,
-            row_number=row_number
+            row_number=row_number,
+            template_number=template_number
         )
-        logger.info(f"Built prompt using row {row_number}: {prompt[:100]}...")
+        logger.info(f"Built prompt using row {row_number}, template {template_number}: {prompt[:100]}...")
         
         # Update debug information for debug panel
-        from utils.route_helpers import last_prompt, last_first_draft, last_revised_response
+        from utils.route_helpers import last_prompt, last_first_draft, last_revised_response, last_row_number, last_template_number
         import utils.route_helpers as debug_vars
         
         # Store the analysis data as first draft 
@@ -308,8 +316,10 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
             "serper_length": len(analysis_serper)
         }, indent=2)
         
-        # Store the final prompt
+        # Store the final prompt and row/template info
         debug_vars.last_prompt = prompt
+        debug_vars.last_row_number = row_number
+        debug_vars.last_template_number = template_number
         
         # Stream the response
         async def response_stream():
@@ -517,7 +527,14 @@ async def debug_analyze_prompt(request_data: dict):
                 return analysis_serper
             return await search_serper(query, num_results)
         
-        # Step 4: Build the final prompt
+        # Step 4: Select template based on analysis data
+        from prompt_builder import select_template_based_on_analysis
+        template_number = None
+        if preprocess_analysis.get('analysis_data'):
+            template_number = select_template_based_on_analysis(preprocess_analysis['analysis_data'], row_number)
+            logger.info(f"Debug: Selected template {template_number} for row {row_number}")
+        
+        # Step 5: Build the final prompt
         try:
             final_prompt = await row_craft(
                 persona, 
@@ -526,18 +543,20 @@ async def debug_analyze_prompt(request_data: dict):
                 extra_persona_context=persona_context, 
                 should_search_web_func=should_search_web_enhanced, 
                 search_serper_func=search_serper_enhanced,
-                row_number=row_number
+                row_number=row_number,
+                template_number=template_number
             )
         except Exception as prompt_error:
             final_prompt = f"Error building prompt: {str(prompt_error)}"
         
-        # Step 5: Return comprehensive debug info
+        # Step 6: Return comprehensive debug info
         return JSONResponse({
             "status": "success",
             "user_message": user_message,
             "debug_info": {
                 "preprocess_analysis": preprocess_analysis,
                 "selected_row": row_number,
+                "selected_template": template_number,
                 "row_prompt_file": row_prompt_info,
                 "memories_count": len(memories_with_scores),
                 "memories_used": [{"memory": mem[0][:100] + "...", "score": mem[1]} for mem in memories_with_scores[:3]],
@@ -562,7 +581,7 @@ async def debug_analyze_prompt(request_data: dict):
 @router.get("/debug/info")
 async def debug_info():
     """Debug endpoint to provide information for the debug panel."""
-    from utils.route_helpers import last_prompt, last_first_draft, last_revised_response, last_preprocessing_response
+    from utils.route_helpers import last_prompt, last_first_draft, last_revised_response, last_preprocessing_response, last_row_number, last_template_number
     
     # Parse JSON data if available for better display
     analysis_data = {}
@@ -592,6 +611,8 @@ async def debug_info():
         "last_first_draft": last_first_draft,
         "last_revised_response": last_revised_response,
         "preprocessing_response": preprocessing_data,
+        "current_row_number": last_row_number,
+        "current_template_number": last_template_number,
         "analysis_summary": {
             "row_selected": analysis_data.get("row_selected", "N/A"),
             "memories_count": analysis_data.get("memories_count", 0),

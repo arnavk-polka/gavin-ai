@@ -463,13 +463,18 @@
         <div id="debug-section">
             <div id="debug-panel">
                 <div class="tabs">
-                    <div class="tab active" onclick="showTab('prompt-tab')">Prompt</div>
+                    <div class="tab active" onclick="showTab('prompt-tab')">Response Builder</div>
                     <div class="tab" onclick="showTab('preprocessing-tab')">Preprocessing</div>
                     <div class="tab" onclick="showTab('raw-tab')">Raw Debug</div>
                 </div>
                 
                 <div id="prompt-tab" class="tab-content active">
-                    <h3>Current Prompt</h3>
+                    <h3>Response Builder</h3>
+                    <div id="response-builder-info" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 5px; font-family: monospace;">
+                        <strong>Row:</strong> <span id="current-row">-</span> | 
+                        <strong>Template:</strong> <span id="current-template">-</span>
+                    </div>
+                    <h4>Current Prompt</h4>
                     <pre id="prompt-content">No prompt generated yet.</pre>
                 </div>
                 
@@ -583,6 +588,15 @@
                         
                         // Update prompt tab
                         promptContent.textContent = data.last_prompt || "No prompt generated yet.";
+                        
+                        // Update row and template info
+                        const currentRow = document.getElementById('current-row');
+                        const currentTemplate = document.getElementById('current-template');
+                        if (currentRow && currentTemplate) {
+                            currentRow.textContent = data.current_row_number || '-';
+                            const templateText = data.current_template_number ? `#${data.current_template_number}` : 'All templates';
+                            currentTemplate.textContent = templateText;
+                        }
                         
                         // Update preprocessing tab
                         if (data.preprocessing_response) {
