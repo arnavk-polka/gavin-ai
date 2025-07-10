@@ -24,8 +24,27 @@ from utils.route_helpers import (
     search_serper,
     store_memories_async
 )
+from utils.auth_middleware import require_auth, require_auth_redirect, get_current_user
+from .auth_routes import auth_router
 
 router = APIRouter()
+
+# Add login route
+@router.get("/login")
+async def login_page(request: Request):
+    """Serve the login page."""
+    # If already authenticated, redirect to main app
+    if request.session.get('authenticated'):
+        return RedirectResponse(url="/")
+    
+    login_path = os.path.join(static_path, "login.html")
+    if os.path.isfile(login_path):
+        return FileResponse(login_path)
+    else:
+        return HTMLResponse(
+            content="<h1>Login Page Not Found</h1>",
+            status_code=404
+        )
 
 
 
@@ -37,9 +56,14 @@ async def debug_redirect():
     return RedirectResponse(url="/debug/")
 
 @router.get("/debug/")
-async def debug_page():
+async def debug_page(request: Request):
     """Serve the chat interface with debug panel enabled."""
-    logger.info("Serving debug page")
+    # Check authentication first
+    redirect_response = require_auth_redirect(request)
+    if redirect_response:
+        return redirect_response
+        
+    logger.info("Serving debug page to authenticated user")
     index_path = os.path.join(static_path, "index.html")
     if os.path.isfile(index_path):
         return FileResponse(index_path)
@@ -50,9 +74,14 @@ async def debug_page():
         )
 
 @router.get("/")
-async def read_root():
+async def read_root(request: Request):
     """Serve the chat interface from static/index.html."""
-    logger.info("Serving index.html")
+    # Check authentication first
+    redirect_response = require_auth_redirect(request)
+    if redirect_response:
+        return redirect_response
+    
+    logger.info("Serving index.html to authenticated user")
     index_path = os.path.join(static_path, "index.html")
     logger.info(f"Checking for index.html at: {index_path}")
     if os.path.isfile(index_path):
@@ -109,7 +138,11 @@ async def save_conversation_to_db(handle: str, user_message: str, assistant_resp
 @router.post("/chat/{handle}")
 async def chat(handle: str, message: dict, request: Request, background_tasks: BackgroundTasks):
     """Chat endpoint that returns a streaming response."""
-    logger.info(f"Chat request for handle: {handle}, message: {message.get('message', '')[:50]}...")
+    # Check authentication first
+    require_auth(request)
+    
+    user = get_current_user(request)
+    logger.info(f"Chat request for handle: {handle} from user: {user.get('email', 'unknown')}, message: {message.get('message', '')[:50]}...")
     start_time = time.time()
     try:
         client_host = request.client.host
@@ -728,6 +761,7 @@ async def test_network_connectivity():
     })
 
 app.include_router(router)
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(memory_router)
 app.include_router(analyze_router)
 app.include_router(logs_router)

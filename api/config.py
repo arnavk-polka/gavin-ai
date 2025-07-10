@@ -7,10 +7,13 @@ from mem0 import Memory
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 import threading
 from typing import List, Dict, Any, Optional, Tuple, Union
 from dotenv import load_dotenv
 import os
+from authlib.integrations.starlette_client import OAuth
+import secrets
 
 load_dotenv()
 
@@ -53,6 +56,10 @@ logger.info("=== END ENVIRONMENT LOADING DEBUG ===")
 # Initialize FastAPI app
 app = FastAPI()
 
+# Add session middleware (required for OAuth)
+SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -61,6 +68,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# OAuth Configuration
+oauth = OAuth()
+
+# Google OAuth configuration
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:8080/auth/callback")
+
+if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+    logger.warning("Google OAuth credentials not found. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.")
+    google_oauth = None
+else:
+    google_oauth = oauth.register(
+        name='google',
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        authorize_url='https://accounts.google.com/o/oauth2/v2/auth',
+        access_token_url='https://oauth2.googleapis.com/token',
+        client_kwargs={
+            'scope': 'email profile'
+        },
+    )
+    logger.info("Google OAuth configured successfully")
 
 # Define static path
 static_path = os.path.join(os.path.dirname(__file__), "static")
