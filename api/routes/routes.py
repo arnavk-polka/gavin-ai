@@ -12,6 +12,7 @@ from utils.utils import preprocess_tweet, add_memory, get_relevant_memories
 from prompt_builder import craft
 from .memory_routes import memory_router
 from .analyze_routes import analyze_router
+from .logs_routes import logs_router
 from preprocess.preprocess_routes import deep_debug_router
 from response_generation import tone_bleurt_gate, enhance_query_context, format_context_enhancement
 import time
@@ -84,10 +85,32 @@ async def health_check():
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unhealthy")
 
+async def save_conversation_to_db(handle: str, user_message: str, assistant_response: str, 
+                                 row_number: int, memories_with_scores: list, serper_results: str, 
+                                 processing_time: float, session_id: str):
+    """Background task to save conversation to database."""
+    try:
+        from database import save_conversation
+        await save_conversation(
+            handle=handle,
+            user_message=user_message,
+            assistant_response=assistant_response,
+            session_id=session_id,
+            row_number=row_number,
+            memories_used=[{"memory": mem[0], "score": mem[1]} for mem in memories_with_scores],
+            serper_results=serper_results,
+            processing_time=processing_time,
+            metadata={"user_agent": "API", "source": "chat_endpoint"}
+        )
+        logger.info(f"Successfully saved conversation to database for handle: {handle}, session: {session_id}")
+    except Exception as e:
+        logger.error(f"Failed to save conversation to database: {e}")
+
 @router.post("/chat/{handle}")
 async def chat(handle: str, message: dict, request: Request, background_tasks: BackgroundTasks):
     """Chat endpoint that returns a streaming response."""
     logger.info(f"Chat request for handle: {handle}, message: {message.get('message', '')[:50]}...")
+    start_time = time.time()
     try:
         client_host = request.client.host
         user_agent = request.headers.get("user-agent", "")
@@ -95,11 +118,48 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
         
         user_message = message["message"]
         
+        # Generate session ID for multi-turn conversation tracking
+        import hashlib
+        import uuid
+        
+        # Check if session_id is provided in the message (client maintaining session)
+        session_id = message.get("session_id")
+        
+        if session_id:
+            # Use provided session ID from client
+            logger.info(f"Using provided session_id: {session_id} for handle: {handle}")
+        else:
+            # Generate new session ID for new conversations
+            history = message.get("history", [])
+            if history and len(history) > 0:
+                # For conversations with history but no session_id, try to maintain consistency
+                # Use a stable hash based on the first message if available
+                first_message = ""
+                if isinstance(history[0], dict) and "content" in history[0]:
+                    first_message = history[0]["content"]
+                elif isinstance(history[0], str):
+                    first_message = history[0]
+                
+                if first_message:
+                    # Create consistent session ID based on first message + handle
+                    consistent_hash = hashlib.md5(f"{handle}_{first_message[:100]}".encode()).hexdigest()[:12]
+                    session_id = f"{handle}_{consistent_hash}"
+                else:
+                    # Fallback to UUID for edge cases
+                    session_id = f"{handle}_{uuid.uuid4().hex[:12]}"
+            else:
+                # Completely new conversation - generate new session ID
+                session_id = f"{handle}_{uuid.uuid4().hex[:12]}"
+            
+            logger.info(f"Generated new session_id: {session_id} for handle: {handle}")
+        
+        logger.info(f"Using session_id: {session_id} for handle: {handle}")
+        
         # Step 1: Analyze user query to determine which row prompt to use
         logger.info("=== STEP 1: ANALYZING USER QUERY FOR PROMPT SELECTION ===")
         try:
             from preprocess.preprocess_routes import analyze_input
-            analysis_response = await analyze_input({"message": user_message})
+            analysis_response = await analyze_input({"message": user_message}, background_tasks)
             
             # Extract analysis data from JSONResponse
             if hasattr(analysis_response, 'body'):
@@ -222,8 +282,15 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
                 return analysis_serper
             return await search_serper(query, num_results)
         
+        # Step 3: Select template based on analysis data
+        from prompt_builder import select_template_based_on_analysis
+        template_number = None
+        if 'analysis_json' in locals() and analysis_json.get('analysis_data'):
+            template_number = select_template_based_on_analysis(analysis_json['analysis_data'], row_number)
+            logger.info(f"Selected template {template_number} for row {row_number} based on analysis")
+        
         # Build the prompt using the selected row's prompt builder
-        logger.info(f"=== STEP 3: BUILDING PROMPT WITH ROW {row_number} ===")
+        logger.info(f"=== STEP 3: BUILDING PROMPT WITH ROW {row_number}, TEMPLATE {template_number} ===")
         prompt = await row_craft(
             persona, 
             memories_with_scores, 
@@ -231,12 +298,13 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
             extra_persona_context=persona_context, 
             should_search_web_func=should_search_web_enhanced, 
             search_serper_func=search_serper_enhanced,
-            row_number=row_number
+            row_number=row_number,
+            template_number=template_number
         )
-        logger.info(f"Built prompt using row {row_number}: {prompt[:100]}...")
+        logger.info(f"Built prompt using row {row_number}, template {template_number}: {prompt[:100]}...")
         
         # Update debug information for debug panel
-        from utils.route_helpers import last_prompt, last_first_draft, last_revised_response
+        from utils.route_helpers import last_prompt, last_first_draft, last_revised_response, last_row_number, last_template_number
         import utils.route_helpers as debug_vars
         
         # Store the analysis data as first draft 
@@ -248,8 +316,10 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
             "serper_length": len(analysis_serper)
         }, indent=2)
         
-        # Store the final prompt
+        # Store the final prompt and row/template info
         debug_vars.last_prompt = prompt
+        debug_vars.last_row_number = row_number
+        debug_vars.last_template_number = template_number
         
         # Stream the response
         async def response_stream():
@@ -292,11 +362,24 @@ async def chat(handle: str, message: dict, request: Request, background_tasks: B
                         "timestamp": time.time()
                     }, indent=2)
                     
-                    # Add final stop token
-                    yield f"data: {json.dumps({'choices': [{'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
+                    # Add final stop token with session_id for client to maintain session
+                    yield f"data: {json.dumps({'choices': [{'delta': {}, 'finish_reason': 'stop'}], 'session_id': session_id, 'metadata': {'session_id': session_id, 'handle': handle}})}\n\n"
                     
                     # Store memories in background
                     background_tasks.add_task(store_memories_async, user_id, user_message, full_response)
+                    
+                    # Store conversation to database in background
+                    background_tasks.add_task(
+                        save_conversation_to_db, 
+                        handle, 
+                        user_message, 
+                        full_response, 
+                        row_number, 
+                        memories_with_scores, 
+                        analysis_serper, 
+                        time.time() - start_time,
+                        session_id
+                    )
 
         return StreamingResponse(
             response_stream(),
@@ -444,7 +527,14 @@ async def debug_analyze_prompt(request_data: dict):
                 return analysis_serper
             return await search_serper(query, num_results)
         
-        # Step 4: Build the final prompt
+        # Step 4: Select template based on analysis data
+        from prompt_builder import select_template_based_on_analysis
+        template_number = None
+        if preprocess_analysis.get('analysis_data'):
+            template_number = select_template_based_on_analysis(preprocess_analysis['analysis_data'], row_number)
+            logger.info(f"Debug: Selected template {template_number} for row {row_number}")
+        
+        # Step 5: Build the final prompt
         try:
             final_prompt = await row_craft(
                 persona, 
@@ -453,18 +543,20 @@ async def debug_analyze_prompt(request_data: dict):
                 extra_persona_context=persona_context, 
                 should_search_web_func=should_search_web_enhanced, 
                 search_serper_func=search_serper_enhanced,
-                row_number=row_number
+                row_number=row_number,
+                template_number=template_number
             )
         except Exception as prompt_error:
             final_prompt = f"Error building prompt: {str(prompt_error)}"
         
-        # Step 5: Return comprehensive debug info
+        # Step 6: Return comprehensive debug info
         return JSONResponse({
             "status": "success",
             "user_message": user_message,
             "debug_info": {
                 "preprocess_analysis": preprocess_analysis,
                 "selected_row": row_number,
+                "selected_template": template_number,
                 "row_prompt_file": row_prompt_info,
                 "memories_count": len(memories_with_scores),
                 "memories_used": [{"memory": mem[0][:100] + "...", "score": mem[1]} for mem in memories_with_scores[:3]],
@@ -489,7 +581,7 @@ async def debug_analyze_prompt(request_data: dict):
 @router.get("/debug/info")
 async def debug_info():
     """Debug endpoint to provide information for the debug panel."""
-    from utils.route_helpers import last_prompt, last_first_draft, last_revised_response, last_preprocessing_response
+    from utils.route_helpers import last_prompt, last_first_draft, last_revised_response, last_preprocessing_response, last_row_number, last_template_number
     
     # Parse JSON data if available for better display
     analysis_data = {}
@@ -519,6 +611,8 @@ async def debug_info():
         "last_first_draft": last_first_draft,
         "last_revised_response": last_revised_response,
         "preprocessing_response": preprocessing_data,
+        "current_row_number": last_row_number,
+        "current_template_number": last_template_number,
         "analysis_summary": {
             "row_selected": analysis_data.get("row_selected", "N/A"),
             "memories_count": analysis_data.get("memories_count", 0),
@@ -636,4 +730,5 @@ async def test_network_connectivity():
 app.include_router(router)
 app.include_router(memory_router)
 app.include_router(analyze_router)
+app.include_router(logs_router)
 app.include_router(deep_debug_router)

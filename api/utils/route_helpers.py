@@ -14,6 +14,8 @@ last_prompt = ""
 last_first_draft = ""
 last_revised_response = ""
 last_preprocessing_response = ""
+last_row_number = None
+last_template_number = None
 # Simple in-memory cache for recent memory searches (optional optimization)
 memory_cache = {}
 

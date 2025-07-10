@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import threading
 from typing import List, Dict, Any, Optional, Tuple, Union
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 
@@ -19,6 +20,35 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('main')
+
+# Debug environment loading
+logger.info("=== ENVIRONMENT LOADING DEBUG ===")
+
+# Check if .env file exists
+env_paths = ['.env', '../.env', '/app/.env', os.path.join(os.path.dirname(__file__), '.env')]
+for env_path in env_paths:
+    if os.path.exists(env_path):
+        logger.info(f"Found .env file at: {env_path}")
+        logger.info(f"File size: {os.path.getsize(env_path)} bytes")
+        break
+else:
+    logger.warning("No .env file found in any of these locations:")
+    for env_path in env_paths:
+        logger.warning(f"  - {env_path} (absolute: {os.path.abspath(env_path)})")
+
+# Try loading again with explicit path and verbose logging
+loaded = load_dotenv(verbose=True)
+logger.info(f"load_dotenv() returned: {loaded}")
+
+# Check specific environment variables
+db_url = os.getenv("DB_CONNECTION_URL")
+logger.info(f"DB_CONNECTION_URL after load_dotenv(): {repr(db_url)}")
+
+# List all environment variables containing 'DB' or 'CONNECTION'
+db_vars = {k: v for k, v in os.environ.items() if 'DB' in k.upper() or 'CONNECTION' in k.upper()}
+logger.info(f"Environment variables with DB/CONNECTION: {list(db_vars.keys())}")
+
+logger.info("=== END ENVIRONMENT LOADING DEBUG ===")
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -230,10 +260,29 @@ async def seed_memories():
 @app.on_event("startup")
 async def startup_event():
     """Initialize everything needed for the application."""
+    # Initialize database first
+    try:
+        from database import init_database
+        await init_database()
+        logger.info("Database initialization completed")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+        # Continue startup even if database fails (for development)
+    
     # Get the current event loop
     loop = asyncio.get_event_loop()
     # Start model initialization in a background thread
     threading.Thread(target=initialize_model, args=(loop,), daemon=True).start()
     # Seed initial memories in background
     asyncio.create_task(seed_memories())
-    logger.info("Application startup tasks initiated. Model loading and memory seeding in background.")
+    logger.info("Application startup tasks initiated. Database, model loading and memory seeding in background.")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up resources on shutdown."""
+    try:
+        from database import close_database
+        await close_database()
+        logger.info("Database connections closed")
+    except Exception as e:
+        logger.error(f"Error closing database: {e}")

@@ -492,6 +492,10 @@
             <h2>Multi-Turn Test</h2>
             
             <div class="chat-container">
+                <div class="session-status" id="sessionStatus" style="padding: 8px 12px; background: #f8f9fa; border-radius: 4px; margin-bottom: 10px; font-size: 12px; color: #6c757d; display: none;">
+                    <span id="sessionText">Session: Not active</span>
+                </div>
+                
                 <div class="chat-messages" id="chatMessages">
                     <!-- Chat messages will appear here -->
                 </div>
@@ -505,6 +509,9 @@
             <div class="test-controls" style="margin-top: 20px;">
                 <button class="start-test-btn" id="startMultiTurnBtn" onclick="startMultiTurnTest()" disabled>
                     Start Test Analysis
+                </button>
+                <button class="secondary-btn" onclick="startNewConversation()" style="margin-left: 10px; background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">
+                    New Conversation
                 </button>
             </div>
         </div>
@@ -555,8 +562,7 @@
         let currentTab = 'transcript';
         let conversationMessages = [];
         let chatMessages = [];
-        let isTestMode = false;
-        let testCompleted = false;
+        let conversationSessionId = null; // Track session ID for multi-turn conversations
 
         // File upload handling
         const fileInput = document.getElementById('fileInput');
@@ -1356,17 +1362,43 @@
             getBotResponse(message);
         }
 
+        function startNewConversation() {
+            // Reset conversation state
+            chatMessages = [];
+            conversationSessionId = null;
+            
+            // Clear chat messages display
+            const messagesContainer = document.getElementById('chatMessages');
+            messagesContainer.innerHTML = '';
+            
+            // Hide session status
+            document.getElementById('sessionStatus').style.display = 'none';
+            
+            // Disable test button
+            document.getElementById('startMultiTurnBtn').disabled = true;
+            
+            console.log('Started new conversation - session reset');
+        }
+
         async function getBotResponse(message) {
             try {
+                // Build request body with session_id if we have one
+                const requestBody = {
+                    message: message,
+                    history: chatMessages
+                };
+                
+                // Include session_id if we have one from previous responses
+                if (conversationSessionId) {
+                    requestBody.session_id = conversationSessionId;
+                }
+                
                 const response = await fetch('/chat/keonehon', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        message: message,
-                        history: chatMessages
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (!response.ok) {
@@ -1388,6 +1420,21 @@
                         if (line.startsWith('data: ')) {
                             try {
                                 const data = JSON.parse(line.slice(6));
+                                
+                                // Capture session_id from response for future requests
+                                if (data.session_id && !conversationSessionId) {
+                                    conversationSessionId = data.session_id;
+                                    console.log('Captured session_id:', conversationSessionId);
+                                    
+                                    // Update session status indicator
+                                    const sessionStatus = document.getElementById('sessionStatus');
+                                    const sessionText = document.getElementById('sessionText');
+                                    sessionText.textContent = `Session: ${conversationSessionId} (Multi-turn active)`;
+                                    sessionStatus.style.display = 'block';
+                                    sessionStatus.style.background = '#d4edda';
+                                    sessionStatus.style.color = '#155724';
+                                }
+                                
                                 if (data.choices && data.choices[0].delta.content) {
                                     botResponse += data.choices[0].delta.content;
                                     updateLastBotMessage(botResponse);

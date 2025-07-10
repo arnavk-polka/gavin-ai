@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GavinAI Logs</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .log-item { background: white; border: none; border-bottom: 1px solid #eee; margin-bottom: 0; border-radius: 0; }
+        .log-header { background: #f8f9fa; padding: 15px; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center; }
+        .log-body { padding: 15px; }
+        .log-message { margin-bottom: 10px; }
+        .log-response { background: #f8f9fa; padding: 10px; border-radius: 5px; margin-top: 10px; }
+        .log-meta { font-size: 12px; color: #6c757d; margin-top: 10px; }
+        .timestamp { color: #6c757d; font-size: 14px; }
+        .row-badge { background: #667eea; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; }
+        .loading { text-align: center; padding: 40px; color: #6c757d; }
+        .error { color: #dc3545; text-align: center; padding: 20px; }
+        .pagination { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
+        .pagination button { padding: 8px 16px; border: 1px solid #dee2e6; background: white; cursor: pointer; border-radius: 4px; }
+        .pagination button.active { background: #667eea; color: white; }
+        .pagination button:hover:not(.active) { background: #f8f9fa; }
+        .search-box { margin-bottom: 20px; }
+        .search-box input { width: 100%; padding: 12px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 16px; }
+        .conversation-item { cursor: pointer; transition: background-color 0.2s; }
+        .conversation-item:hover { background: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>GavinAI Conversation Logs</h1>
+            <p>View and analyze all conversations with detailed insights</p>
+        </div>
+        
+        <div class="content">
+            <div id="loading" class="loading">Loading...</div>
+            <div id="error" class="error" style="display: none;"></div>
+            
+            <div id="conversations-content" style="display: none;">
+                
+                
+                <!-- Column Headers -->
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: #f8f9fa; border-bottom: 2px solid #dee2e6; font-weight: 600; color: #495057; font-size: 14px;">
+                    <div style="display: flex; gap: 20px; align-items: center; flex: 1;">
+                        <div style="min-width: 120px;">Handle</div>
+                        <div style="min-width: 100px;">Messages</div>
+                        <div style="min-width: 100px;">Session ID</div>
+                    </div>
+                    <div style="text-align: right;">Last Updated</div>
+                </div>
+                
+                <div id="conversations-list" style="border: 1px solid #dee2e6; border-top: none; background: white;"></div>
+                <div id="conv-pagination" class="pagination"></div>
+            </div>
+            
+            <div id="conversation-detail" style="display: none;">
+                <button onclick="showConversationsList()" style="margin-top: 20px; margin-bottom: 20px; padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">← Back to Conversations</button>
+                <div id="conversation-detail-content"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentPage = 0;
+        const itemsPerPage = 10;
+        
+        // Helper function to escape HTML and handle newlines safely
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        async function loadData() {
+            await loadConversations();
+        }
+        
+        function showConversationsList() {
+            document.getElementById('conversation-detail').style.display = 'none';
+            document.getElementById('conversations-content').style.display = 'block';
+        }
+        
+        async function showConversationDetail(conversationId) {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            
+            try {
+                const response = await fetch(`/api/logs/conversation/${conversationId}`);
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.conversation) {
+                    throw new Error('No conversation data received');
+                }
+                
+                const conversation = data.conversation;
+                const detailContent = document.getElementById('conversation-detail-content');
+                
+                // Safely handle messages array
+                const messages = conversation.messages || [];
+                const preprocessingData = conversation.preprocessing_data || [];
+                
+                // Handle multi-turn conversations
+                let messagesHtml = '';
+                if (messages.length > 0) {
+                    messagesHtml = messages.map((msg, index) => {
+                        try {
+                            // Safely handle message data
+                            if (!msg || typeof msg !== 'object') {
+                                return `<div style="padding: 20px; text-align: center; color: #dc3545; background: #f8d7da; border-radius: 8px; margin-bottom: 20px;">
+                                    ⚠️ Message ${index + 1}: Invalid message data
+                                </div>`;
+                            }
+                            
+                            const msgPreprocessingData = preprocessingData[index] || null;
+                        
+                        return `
+                        <div style="margin-bottom: 30px; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden; background: white;">
+                            <div style="background: #f8f9fa; padding: 16px; border-bottom: 1px solid #dee2e6;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <h4 style="margin: 0; color: #495057; font-weight: 600;">
+                                        Message ${index + 1}
+                                        <span style="background: #6c757d; color: white; padding: 4px 12px; border-radius: 16px; font-size: 12px; margin-left: 10px;">
+                                            Row ${msg.row_number || 'N/A'}
+                                        </span>
+                                    </h4>
+                                    <div style="text-align: right; font-size: 14px; color: #6c757d;">
+                                        <div>${msg.timestamp ? new Date(msg.timestamp).toLocaleString() : 'No timestamp'}</div>
+                                        <div>Processing: ${msg.processing_time ? msg.processing_time.toFixed(2) : '0.00'}s</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="padding: 20px;">
+                                <!-- User Message Section -->
+                                <div style="margin-bottom: 20px;">
+                                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                                        <h5 style="margin: 0; color: #495057; font-weight: 600;">User Message</h5>
+                                    </div>
+                                    <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; border-left: 4px solid #6c757d; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                        ${escapeHtml(msg.user_message || 'No message')}
+                                    </div>
+                                </div>
+                                
+                                <!-- Preprocessing Section -->
+                                ${msgPreprocessingData ? `
+                                <div style="margin-bottom: 20px;">
+                                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                                        <h5 style="margin: 0; color: #495057; font-weight: 600;">Preprocessing Analysis</h5>
+                                        <span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-left: 8px;">
+                                            ${msgPreprocessingData.processing_time ? msgPreprocessingData.processing_time.toFixed(2) : '0.00'}s
+                                        </span>
+                                    </div>
+                                    
+                                    <div style="display: grid; gap: 12px; margin-bottom: 12px;">
+                                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; border-left: 3px solid #6c757d;">
+                                                <strong style="color: #495057;">Search Query:</strong><br>
+                                                <span style="font-size: 14px;">${escapeHtml(msgPreprocessingData.search_query || 'None')}</span>
+                                            </div>
+                                            <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; border-left: 3px solid #6c757d;">
+                                                <strong style="color: #495057;">Memory Query:</strong><br>
+                                                <span style="font-size: 14px;">${escapeHtml(msgPreprocessingData.memory_query || 'None')}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- OpenAI Response JSON -->
+                                    <div style="margin-top: 15px;">
+                                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                            <strong style="color: #495057;">OpenAI Preprocessing Response:</strong>
+                                            <button onclick="toggleJson('json-${index}')" style="background: #6c757d; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;">
+                                                Toggle JSON
+                                            </button>
+                                        </div>
+                                        <div id="json-${index}" style="background: #2d3748; color: #e2e8f0; padding: 16px; border-radius: 8px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 13px; line-height: 1.4; overflow-x: auto; max-height: 300px; overflow-y: auto; display: none;">
+                                            <pre style="margin: 0; white-space: pre-wrap;">${escapeHtml(msgPreprocessingData.raw_openai_response || 'No response data')}</pre>
+                                        </div>
+                                    </div>
+                                </div>
+                                ` : `
+                                <div style="margin-bottom: 20px; padding: 12px; background: #f8f9fa; border-radius: 6px; color: #6c757d; text-align: center; font-style: italic;">
+                                    ⚠️ No preprocessing data found for this message
+                                </div>
+                                `}
+                                
+                                <!-- Assistant Response Section -->
+                                <div style="margin-bottom: 20px;">
+                                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                                        <h5 style="margin: 0; color: #495057; font-weight: 600;">Assistant Response</h5>
+                                    </div>
+                                    <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; border-left: 4px solid #6c757d; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6;">
+                                        ${escapeHtml(msg.assistant_response || 'No response').split('\n').join('<br>')}
+                                    </div>
+                                </div>
+                                
+                                <!-- Additional Data Sections -->
+                                ${msg.memories_used && msg.memories_used.length > 0 ? `
+                                <div style="margin-bottom: 20px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                                        <div style="display: flex; align-items: center;">
+                                            <h5 style="margin: 0; color: #495057; font-weight: 600;">Memories Used</h5>
+                                            <span style="background: #6c757d; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-left: 8px; font-weight: 600;">
+                                                ${msg.memories_used.length}
+                                            </span>
+                                        </div>
+                                        <button onclick="toggleMemories('memories-${index}')" style="background: #6c757d; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; cursor: pointer;">
+                                            <span id="memories-toggle-${index}">View</span>
+                                        </button>
+                                    </div>
+                                    <div id="memories-${index}" style="background: #f8f9fa; padding: 16px; border-radius: 8px; border-left: 4px solid #6c757d; display: none;">
+                                        ${msg.memories_used.map(mem => `
+                                            <div style="margin-bottom: 12px; padding: 12px; background: white; border-radius: 6px; border: 1px solid #dee2e6;">
+                                                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 6px;">
+                                                    <strong style="color: #495057;">Score: ${mem.score ? mem.score.toFixed(4) : 'N/A'}</strong>
+                                                </div>
+                                                <div style="font-size: 14px; color: #333;">${escapeHtml(mem.memory || 'No memory text')}</div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                ` : ''}
+                                
+                                ${msg.serper_results && msg.serper_results !== 'No search query extracted from analysis' ? `
+                                <div style="margin-bottom: 20px;">
+                                    <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                                        <h5 style="margin: 0; color: #495057; font-weight: 600;">Web Search Results</h5>
+                                    </div>
+                                    <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; border-left: 4px solid #6c757d;">
+                                        <pre style="white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; font-size: 14px; line-height: 1.5; color: #333;">${escapeHtml(msg.serper_results)}</pre>
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                        } catch (msgError) {
+                            console.error(`Error rendering message ${index + 1}:`, msgError);
+                            return `<div style="padding: 20px; text-align: center; color: #dc3545; background: #f8d7da; border-radius: 8px; margin-bottom: 20px;">
+                                ⚠️ Message ${index + 1}: Error rendering message - ${msgError.message}
+                            </div>`;
+                        }
+                    }).join('');
+                } else {
+                    messagesHtml = '<div style="text-align: center; color: #6c757d; padding: 20px;">No messages found</div>';
+                }
+                
+                detailContent.innerHTML = `
+                    <div class="log-item">
+                        <div class="log-header">
+                            <h2>Conversation #${conversation.id}</h2>
+                            <span class="timestamp">Last updated: ${new Date(conversation.last_message_time).toLocaleString()}</span>
+                        </div>
+                        <div class="log-body">
+                            <div style="margin-bottom: 25px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 20px; border-radius: 12px; border: 1px solid #dee2e6;">
+                                <h3 style="margin: 0 0 15px 0; color: #495057;">Conversation Overview</h3>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
+                                    <div style="background: white; padding: 12px; border-radius: 8px; border: 1px solid #dee2e6;">
+                                        <strong style="color: #667eea;">Handle:</strong><br>
+                                        <span style="font-size: 14px;">${conversation.handle || 'N/A'}</span>
+                                    </div>
+                                    <div style="background: white; padding: 12px; border-radius: 8px; border: 1px solid #dee2e6;">
+                                        <strong style="color: #28a745;">Messages:</strong><br>
+                                        <span style="font-size: 14px;">${conversation.total_messages || 0}</span>
+                                    </div>
+                                    <div style="background: white; padding: 12px; border-radius: 8px; border: 1px solid #dee2e6;">
+                                        <strong style="color: #ffc107;">Session ID:</strong><br>
+                                        <span style="font-size: 12px; font-family: monospace;">${conversation.session_id || 'N/A'}</span>
+                                    </div>
+                                    <div style="background: white; padding: 12px; border-radius: 8px; border: 1px solid #dee2e6;">
+                                        <strong style="color: #fd7e14;">Processing:</strong><br>
+                                        <span style="font-size: 14px;">${conversation.total_processing_time ? conversation.total_processing_time.toFixed(2) : '0.00'}s</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <h3 style="margin: 0 0 20px 0; color: #495057;">Message Thread</h3>
+                            ${messagesHtml}
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('conversations-content').style.display = 'none';
+                document.getElementById('conversation-detail').style.display = 'block';
+                loading.style.display = 'none';
+                
+            } catch (err) {
+                loading.style.display = 'none';
+                error.style.display = 'block';
+                error.textContent = `Error loading conversation details: ${err.message}`;
+            }
+        }
+       
+        async function loadConversations() {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            
+            if (!loading || !error) {
+                console.error('Required DOM elements not found:', { loading: !!loading, error: !!error });
+                return;
+            }
+            
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            
+            try {
+                console.log('Making request to:', `/api/logs/conversations?limit=${itemsPerPage}&offset=${currentPage * itemsPerPage}`);
+                const response = await fetch(`/api/logs/conversations?limit=${itemsPerPage}&offset=${currentPage * itemsPerPage}`);
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('API response data:', data);
+                
+                const container = document.getElementById('conversations-list');
+                container.innerHTML = '';
+                
+                // Check if we have conversations
+                if (!data.conversations || data.conversations.length === 0) {
+                    container.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 40px;">No conversations found</div>';
+                    document.getElementById('conversations-content').style.display = 'block';
+                    loading.style.display = 'none';
+                    return;
+                }
+                
+                data.conversations.forEach(conv => {
+                    const item = document.createElement('div');
+                    item.className = 'log-item conversation-item';
+                    item.onclick = () => showConversationDetail(conv.id);
+                    
+                    // Minimalistic list view - only essential info
+                    item.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid #eee;">
+                            <div style="display: flex; gap: 20px; align-items: center; flex: 1;">
+                                <div style="font-weight: 600; color: #333; min-width: 120px;">
+                                    ${conv.handle || 'Unknown'}
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="background: ${conv.total_messages > 1 ? '#28a745' : '#6c757d'}; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;">
+                                        ${conv.total_messages} ${conv.total_messages === 1 ? 'message' : 'messages'}
+                                    </span>
+                                </div>
+                                <div style="color: #6c757d; font-size: 14px; font-family: monospace; min-width: 100px;">
+                                    ${conv.session_id ? conv.session_id.split('_').pop() : 'N/A'}
+                                </div>
+                            </div>
+                            <div style="color: #6c757d; font-size: 14px; text-align: right;">
+                                ${new Date(conv.last_message_time).toLocaleString()}
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(item);
+                });
+                
+                // Create pagination if we have data
+                if (data.total > 0) {
+                    createPagination('conv-pagination', data.total, loadConversations);
+                }
+                
+                document.getElementById('conversations-content').style.display = 'block';
+                loading.style.display = 'none';
+                
+            } catch (err) {
+                console.error('Error loading conversations:', err);
+                console.error('Error stack:', err.stack);
+                loading.style.display = 'none';
+                error.style.display = 'block';
+                error.textContent = `Error loading conversations: ${err.message}`;
+            }
+        }
+       
+        function createPagination(containerId, total, loadFunc) {
+            const container = document.getElementById(containerId);
+            const totalPages = Math.ceil(total / itemsPerPage);
+            
+            container.innerHTML = '';
+            
+            for (let i = 0; i < totalPages; i++) {
+                const button = document.createElement('button');
+                button.textContent = i + 1;
+                button.className = i === currentPage ? 'active' : '';
+                button.onclick = () => {
+                    currentPage = i;
+                    loadFunc();
+                };
+                container.appendChild(button);
+            }
+        }
+        
+        function filterConversations() {
+            // Simple client-side filtering - could be enhanced with server-side filtering
+            const search = document.getElementById('conv-search').value.toLowerCase();
+            const items = document.querySelectorAll('#conversations-list .log-item');
+            
+            items.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(search) ? 'block' : 'none';
+            });
+        }
+        
+        function toggleJson(elementId) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                if (element.style.display === 'none' || element.style.display === '') {
+                    element.style.display = 'block';
+                } else {
+                    element.style.display = 'none';
+                }
+            }
+        }
+
+        function toggleMemories(elementId) {
+            const element = document.getElementById(elementId);
+            const toggleSpan = document.getElementById(`memories-toggle-${elementId.split('-')[1]}`);
+            if (element && toggleSpan) {
+                if (element.style.display === 'none' || element.style.display === '') {
+                    element.style.display = 'block';
+                    toggleSpan.textContent = 'Hide';
+                } else {
+                    element.style.display = 'none';
+                    toggleSpan.textContent = 'View';
+                }
+            }
+        }
+        
+        // Load conversations by default
+        loadData();
+    </script>
+</body>
+</html> 
