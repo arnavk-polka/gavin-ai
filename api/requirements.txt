@@ -21,3 +21,10 @@ evaluate>=0.4.0
 scikit-learn>=1.0.0
 tensorflow>=2.12.0
 asyncpg>=0.28.0
+tf-keras
+google-auth>=2.0.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
+authlib>=1.2.0
+itsdangerous>=2.0.0
+starlette>=0.27.0
